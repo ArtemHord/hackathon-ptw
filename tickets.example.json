@@ -1,0 +1,23 @@
+[
+  {
+    "id": "T1",
+    "title": "Walking skeleton: scaffold, contracts, one endpoint wired to one screen",
+    "labels": ["agent:claude", "area:infra", "P0"],
+    "depends_on": [],
+    "body": "## Goal\nThe app starts locally and one screen shows data from one real endpoint.\n\n## Context\nSPEC.md §6–7\n\n## Files / area\n- area: infra\n- creates: repo scaffold, `contracts/`\n\n## Acceptance criteria\n- [ ] `<run cmd>` starts FE and BE\n- [ ] `curl localhost:8000/api/health` returns `{\"ok\":true}`\n- [ ] Home screen renders data from `GET /api/items`\n\n## Out of scope\n- styling, auth"
+  },
+  {
+    "id": "T2",
+    "title": "BE: POST /api/analyze calls OpenAI and returns structured result",
+    "labels": ["agent:codex", "area:be", "P0"],
+    "depends_on": ["T1"],
+    "body": "## Goal\n...\n\n## Files / area\n- area: be\n- touch only: `backend/routes/analyze.*`\n\n## Acceptance criteria\n- [ ] `curl -X POST localhost:8000/api/analyze -d '{\"text\":\"hi\"}'` returns JSON matching `contracts/analyze.json`\n\n## Out of scope\n- caching"
+  },
+  {
+    "id": "T3",
+    "title": "FE: result screen for /api/analyze (mocked until T2 lands)",
+    "labels": ["agent:claude", "area:fe", "P0"],
+    "depends_on": ["T1"],
+    "body": "## Goal\n...\n\n## Files / area\n- area: fe\n- touch only: `frontend/src/pages/result.*`\n\n## Acceptance criteria\n- [ ] With mock data from `contracts/analyze.json`, page shows ...\n\n## Out of scope\n- animations"
+  }
+]

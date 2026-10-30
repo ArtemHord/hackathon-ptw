@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+.claude/worktrees/
+.claude/settings.local.json
+tickets.map.json
+node_modules/
+__pycache__/
+.venv/
+.DS_Store

@@ -1,0 +1,3 @@
+# Files copied into every `claude -w` worktree (gitignore syntax)
+.env
+.env.local
