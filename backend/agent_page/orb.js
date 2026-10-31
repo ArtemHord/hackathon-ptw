@@ -101,25 +101,26 @@
   var TR_DUR = 0.8, SERVER_TTL = 45, MIC_THRESH = 0.12, MIC_HOLD = 0.8, FRAME_MS = 1000 / 30;
 
   // ── canvas setup ──
-  var W = 1280, H = 720, BUF_U = 660; // offscreen buffers cover -330..330 orb units
-  function mk(px) { var c = document.createElement("canvas"); c.width = c.height = px; return c; }
-  var cv, g, bufQ, gQ, bufH, gH, hasFilter;
-  var Q = 220, QH = 440; // buffer px; quarter-res for halos/inner blobs, half-res for the soft rim
+  // Everything with an edge (body, rim, rings) is drawn at full 1280x720 on the main canvas.
+  // Only edge-less blurred light (halos, inner blobs) goes through a half-res full-frame buffer.
+  var W = 1280, H = 720, GR = 0.5; // glow buffer = 640x360
+  var cv, g, bufG, gG, hasFilter;
 
   function blurPx(ctx, px) { if (hasFilter) ctx.filter = px > 0.3 ? "blur(" + px.toFixed(2) + "px)" : "none"; }
-  function bufBegin(ctx, px) {
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
-    if (hasFilter) ctx.filter = "none";
-    ctx.clearRect(0, 0, px, px);
-    var q = px / BUF_U; ctx.setTransform(q, 0, 0, q, px / 2, px / 2); return q;
+  var O = { x: 0, y: 0 }; // orb centre in screen px for the current frame
+  // clear the glow buffer and map orb units onto it; returns buffer px per orb unit
+  function bufBegin(u) {
+    gG.setTransform(1, 0, 0, 1, 0, 0); gG.globalCompositeOperation = "source-over"; gG.globalAlpha = 1;
+    if (hasFilter) gG.filter = "none";
+    gG.clearRect(0, 0, bufG.width, bufG.height);
+    var q = u * GR; gG.setTransform(q, 0, 0, q, O.x * GR, O.y * GR); return q;
   }
-  // fill the shape on a buffer with an extra translate/scale (SVG "translate() scale()"), blurred by sd orb units
-  function blob(ctx, q, path, fill, alpha, sd, tx, ty, s) {
-    var px = ctx.canvas.width;
-    ctx.setTransform(q * s, 0, 0, q * s, px / 2 + tx * q, px / 2 + ty * q);
-    blurPx(ctx, sd * s * q); ctx.globalAlpha = alpha; ctx.fillStyle = fill; ctx.fill(path);
+  // fill the shape on the buffer with an extra translate/scale (SVG "translate() scale()"), blurred by sd orb units
+  function blob(q, path, fill, alpha, sd, tx, ty, s) {
+    gG.setTransform(q * s, 0, 0, q * s, O.x * GR + tx * q, O.y * GR + ty * q);
+    blurPx(gG, sd * s * q); gG.globalAlpha = alpha; gG.fillStyle = fill; gG.fill(path);
   }
-  function blit(buf, ox, oy, u) { var S = BUF_U * u; g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(buf, ox - S / 2, oy - S / 2, S, S); }
+  function blit() { g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(bufG, 0, 0, W, H); }
   function bbGrad(ctx, bb, x1, y1, x2, y2, deg) {
     var a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
     function rot(px, py) { var dx = px - 0.5, dy = py - 0.5; return [0.5 + dx * c - dy * s, 0.5 + dx * s + dy * c]; }
@@ -134,12 +135,13 @@
     var drift = 0, i;
     for (i = 0; i < st.hts.length; i++) drift += st.hts[i][1] * Math.sin(st.hts[i][0] * OM);
 
-    // halos (behind the body): one quarter-res buffer
-    var q = bufBegin(gQ, Q);
-    blob(gQ, q, d, x("h3"), 0.95, 38, 0, 18 - 12 * h, 1.27 + 0.1 * L);
-    blob(gQ, q, d, x("hm"), Math.max(0, 0.55 - 0.2 * h), 24, 0, 8 - 4 * h, 1.17 + 0.06 * L);
-    blob(gQ, q, d, x("h1"), 1, 13, 0, 0, 1.075 + 0.03 * L - 0.015 * h);
-    blit(bufQ, ox, oy, u);
+    O.x = ox; O.y = oy;
+    // halos (behind the body): half-res glow buffer
+    var q = bufBegin(u);
+    blob(q, d, x("h3"), 0.95, 38, 0, 18 - 12 * h, 1.27 + 0.1 * L);
+    blob(q, d, x("hm"), Math.max(0, 0.55 - 0.2 * h), 24, 0, 8 - 4 * h, 1.17 + 0.06 * L);
+    blob(q, d, x("h1"), 1, 13, 0, 0, 1.075 + 0.03 * L - 0.015 * h);
+    blit();
 
     // body
     g.setTransform(u, 0, 0, u, ox, oy);
@@ -148,33 +150,32 @@
     g.fillStyle = gr; g.fill(d);
 
     // inner light + shade, clipped to the body
-    q = bufBegin(gQ, Q);
-    blob(gQ, q, d, x("inn"), 1, 24, 0, 75 * (1 - h), 0.72 + 0.38 * h);
-    if (h < 0.99) blob(gQ, q, d, PR.shadeCol, 0.45 * (1 - h), 20, -10, -95, 0.75);
-    g.save(); g.clip(d); g.setTransform(1, 0, 0, 1, 0, 0); blit(bufQ, ox, oy, u);
+    // inner light + shade, clipped to the full-res body edge
+    q = bufBegin(u);
+    blob(q, d, x("inn"), 1, 24, 0, 75 * (1 - h), 0.72 + 0.38 * h);
+    if (h < 0.99) blob(q, d, PR.shadeCol, 0.45 * (1 - h), 20, -10, -95, 0.75);
+    g.save(); g.clip(d); blit();
     if (churnOp > 0.01) { // thinking: three blobs swirl inside, screen-blended
-      q = bufBegin(gQ, Q);
+      q = bufBegin(u);
       var ph = churnPhi * OM, cr = 62 * st.scale, B = [[COL.O, 0, 1, 1], [COL.CR, 2.1, 2, 1], [COL.R, 4.2, 1, 2]];
-      gQ.globalCompositeOperation = "screen"; blurPx(gQ, 26 * q); gQ.globalAlpha = 0.85 * churnOp;
+      gG.globalCompositeOperation = "screen"; blurPx(gG, 26 * q); gG.globalAlpha = 0.85 * churnOp;
       for (i = 0; i < 3; i++) {
-        gQ.fillStyle = B[i][0]; gQ.beginPath();
-        gQ.arc(cr * Math.sin(ph * B[i][2] + B[i][1]), cr * Math.cos(ph * B[i][3] + B[i][1] * 0.7), 70 * st.scale, 0, TAU);
-        gQ.fill();
+        gG.fillStyle = B[i][0]; gG.beginPath();
+        gG.arc(cr * Math.sin(ph * B[i][2] + B[i][1]), cr * Math.cos(ph * B[i][3] + B[i][1] * 0.7), 70 * st.scale, 0, TAU);
+        gG.fill();
       }
-      g.globalCompositeOperation = "screen"; blit(bufQ, ox, oy, u); g.globalCompositeOperation = "source-over";
+      g.globalCompositeOperation = "screen"; blit(); g.globalCompositeOperation = "source-over";
     }
     g.restore();
 
-    // rim: soft wide stroke on a half-res buffer, crisp strokes on top
+    // rim: soft wide stroke + crisp strokes, all full-res on the main canvas
     var rim = function (ctx) {
       var r = bbGrad(ctx, bb, 0.15, 0, 0.85, 1, -6 + 22 * drift);
       r.addColorStop(0, x("rimA")); r.addColorStop(0.28, x("rimB", 0.95)); r.addColorStop(0.6, x("rimB", 0)); r.addColorStop(1, x("rimB", 0));
       return r;
     };
-    q = bufBegin(gH, QH);
-    blurPx(gH, 4 * q); gH.strokeStyle = rim(gH); gH.lineWidth = 9; gH.lineJoin = "round"; gH.stroke(d);
-    blit(bufH, ox, oy, u);
     g.setTransform(u, 0, 0, u, ox, oy); g.lineJoin = "round";
+    blurPx(g, 4 * u); g.strokeStyle = rim(g); g.lineWidth = 9; g.stroke(d); blurPx(g, 0);
     var e = bbGrad(g, bb, 0.15, 0, 0.85, 1, 0);
     e.addColorStop(0, x("edge", 0)); e.addColorStop(0.55, x("edge", 0)); e.addColorStop(1, x("edge", 0.85));
     g.globalAlpha = 0.8; g.strokeStyle = e; g.lineWidth = 3; g.stroke(d);
@@ -313,7 +314,8 @@
     el.caret.style.visibility = caret ? "visible" : "hidden";
     el.ask.style.opacity = a.textOp.toFixed(3);
     el.plate.style.opacity = a.barOp.toFixed(3);
-    el.plate.style.transform = "translateY(" + ((1 - a.barOp) * 14).toFixed(1) + "px)";
+    // no transform at rest so the Druk text stays on whole pixels (crisp)
+    el.plate.style.transform = a.barOp >= 0.999 ? "none" : "translateY(" + Math.round((1 - a.barOp) * 14) + "px)";
     el.fill.style.width = (a.frac * 100).toFixed(2) + "%";
     el.fill.style.background = a.flash > 0 ? rgba("#7A2A2C", "#D95B48", a.flash) : a.hot ? "#8E1E3C" : "#7A2A2C";
   }
@@ -400,7 +402,9 @@
     init: function (opts) {
       cv = opts.canvas; g = cv.getContext("2d");
       hasFilter = "filter" in g;
-      bufQ = mk(Q); gQ = bufQ.getContext("2d"); bufH = mk(QH); gH = bufH.getContext("2d");
+      cv.width = W; cv.height = H; // backing store exactly 1280x720, shown 1:1 by CSS
+      bufG = document.createElement("canvas"); bufG.width = Math.round(W * GR); bufG.height = Math.round(H * GR);
+      gG = bufG.getContext("2d");
       el = { ask: opts.ask, q: opts.question, plate: opts.plate, fill: opts.fill, phrase: opts.phrase, label: opts.label };
       el.caret = document.createElement("span"); el.caret.className = "caret";
       if (opts.inputs) inputs = opts.inputs;
