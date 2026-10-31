@@ -5,6 +5,9 @@ to `/agent-page/ws`, plays the mp3 we push into the call and reports `speaking` 
 Single instance: sockets and speaking flags live in this process (like hub.py).
 
 Server -> page: {"type":"play","id","audio_b64","text"?} | {"type":"tone","id"}
+               | {"type":"state","state":"idle"|"listening"|"thinking"|"speaking"}   (orb, M2.5)
+               | {"type":"ask","id","question","expert","timeout_s"}
+               | {"type":"ask_done","id","result":"answered"|"timeout"}
 Page -> server: {"type":"speaking","value":bool,"id"}
 """
 
@@ -16,7 +19,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.meetings import error_response
@@ -26,7 +29,17 @@ log = logging.getLogger(__name__)
 
 WS_UNAUTHORIZED = 4401
 SPEAKING_TTL_S = 90.0  # a speaking=true older than this is stale (lost page / missed false)
-PAGE = Path(__file__).resolve().parent.parent / "agent_page" / "index.html"
+PAGE_DIR = Path(__file__).resolve().parent.parent / "agent_page"
+PAGE = PAGE_DIR / "index.html"
+ORB_JS = PAGE_DIR / "orb.js"
+# Whitelist, not a directory mount: no path traversal, explicit font types.
+ASSETS = {
+    "DrukWideCyr.ttf": "font/ttf",
+    "Onest-latin.woff2": "font/woff2",
+    "JetBrainsMono-latin.woff2": "font/woff2",
+}
+ORB_STATES = frozenset({"idle", "listening", "thinking", "speaking"})
+ASK_RESULTS = frozenset({"answered", "timeout"})
 
 _pages: dict[str, set[WebSocket]] = defaultdict(set)
 _speaking: dict[str, tuple[bool, float]] = {}  # meeting_id -> (value, monotonic ts)
@@ -87,10 +100,69 @@ async def play_test_tone(meeting_id: str) -> bool:
     return await _send(meeting_id, {"type": "tone", "id": uuid.uuid4().hex[:12]})
 
 
+async def _send_safe(meeting_id: str, msg: dict[str, Any]) -> bool:
+    try:
+        return await _send(meeting_id, msg)
+    except Exception as e:  # orb visuals must never break the caller
+        log.warning("agent page: %s send failed for %s: %s", msg.get("type"), meeting_id, e)
+        return False
+
+
+async def send_state(meeting_id: str, state: str) -> bool:
+    """Orb state: idle | listening | thinking | speaking. False if unknown or no page."""
+    if state not in ORB_STATES:
+        log.warning("agent page: unknown orb state %r", state)
+        return False
+    return await _send_safe(meeting_id, {"type": "state", "state": state})
+
+
+async def send_ask(
+    meeting_id: str, esc_id: str, question: str, expert: str, timeout_s: int | float
+) -> bool:
+    """Orb ask sequence: question types out, plate 'ASKING <EXPERT> ON SLACK' drains."""
+    try:
+        timeout = int(timeout_s)
+    except (TypeError, ValueError):
+        timeout = 120
+    msg = {
+        "type": "ask",
+        "id": str(esc_id),
+        "question": str(question),
+        "expert": str(expert),
+        "timeout_s": timeout,
+    }
+    return await _send_safe(meeting_id, msg)
+
+
+async def send_ask_done(meeting_id: str, esc_id: str, result: str) -> bool:
+    """End the ask sequence: 'answered' (coral flash -> thinking) or 'timeout' (-> idle)."""
+    if result not in ASK_RESULTS:
+        log.warning("agent page: unknown ask result %r", result)
+        return False
+    return await _send_safe(meeting_id, {"type": "ask_done", "id": str(esc_id), "result": result})
+
+
 @router.get("/agent", include_in_schema=False)
 async def agent_page() -> FileResponse:
     # No auth: the page reads meeting_id and token from its own query string.
     return FileResponse(PAGE, media_type="text/html", headers={"Cache-Control": "no-store"})
+
+
+@router.get("/agent/orb.js", include_in_schema=False)
+async def agent_orb_js() -> FileResponse:
+    return FileResponse(ORB_JS, media_type="text/javascript", headers={"Cache-Control": "no-store"})
+
+
+@router.get("/agent/assets/{name}", include_in_schema=False)
+async def agent_asset(name: str) -> FileResponse:
+    media_type = ASSETS.get(name)
+    if media_type is None:
+        raise HTTPException(status_code=404)
+    return FileResponse(
+        PAGE_DIR / "assets" / name,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.websocket("/agent-page/ws")

@@ -107,3 +107,69 @@ def test_speaking_flag_expires(monkeypatch):
     assert agent_voice.is_speaking("m_01") is True
     now[0] += 2
     assert agent_voice.is_speaking("m_01") is False
+
+
+@pytest.mark.parametrize(
+    "path,ctype",
+    [
+        ("/agent/orb.js", "text/javascript"),
+        ("/agent/assets/DrukWideCyr.ttf", "font/ttf"),
+        ("/agent/assets/Onest-latin.woff2", "font/woff2"),
+        ("/agent/assets/JetBrainsMono-latin.woff2", "font/woff2"),
+    ],
+)
+def test_agent_assets_served(path, ctype):
+    r = TestClient(app).get(path)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith(ctype)
+    assert len(r.content) > 1000
+
+
+def test_agent_assets_whitelist():
+    client = TestClient(app)
+    assert client.get("/agent/assets/index.html").status_code == 404
+    assert client.get("/agent/assets/..%2Findex.html").status_code == 404
+    page = client.get("/agent").text
+    assert "/agent/orb.js" in page and "/agent/assets/DrukWideCyr.ttf" in page
+
+
+def test_orb_messages_delivered():
+    client = TestClient(app)
+    with client.websocket_connect("/agent-page/ws?meeting_id=m_01&token=wh-t") as ws:
+        assert wait_for(lambda: agent_voice.connected("m_01") == 1)
+        call = ws.portal.call
+
+        assert call(agent_voice.send_state, "m_01", "thinking") is True
+        assert ws.receive_json() == {"type": "state", "state": "thinking"}
+
+        assert call(agent_voice.send_ask, "m_01", "esc_1", "What is p95?", "Bob", 120) is True
+        assert ws.receive_json() == {
+            "type": "ask",
+            "id": "esc_1",
+            "question": "What is p95?",
+            "expert": "Bob",
+            "timeout_s": 120,
+        }
+
+        assert call(agent_voice.send_ask_done, "m_01", "esc_1", "answered") is True
+        assert ws.receive_json() == {"type": "ask_done", "id": "esc_1", "result": "answered"}
+
+        # invalid values are refused, not sent
+        assert call(agent_voice.send_state, "m_01", "dancing") is False
+        assert call(agent_voice.send_ask_done, "m_01", "esc_1", "maybe") is False
+        assert call(agent_voice.send_ask_done, "m_01", "esc_1", "timeout") is True
+        assert ws.receive_json()["result"] == "timeout"
+
+
+async def test_orb_sends_without_page_or_on_error(monkeypatch):
+    assert await agent_voice.send_state("m_none", "idle") is False
+    assert await agent_voice.send_ask("m_none", "e", "q", "Bob", 120) is False
+    assert await agent_voice.send_ask_done("m_none", "e", "timeout") is False
+
+    async def boom(*a, **k):
+        raise RuntimeError("socket on fire")
+
+    monkeypatch.setattr(agent_voice, "_send", boom)
+    assert await agent_voice.send_state("m_01", "thinking") is False
+    assert await agent_voice.send_ask("m_01", "e", "q", "Bob", "x") is False
+    assert await agent_voice.send_ask_done("m_01", "e", "answered") is False
