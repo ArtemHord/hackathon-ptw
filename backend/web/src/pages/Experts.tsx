@@ -31,7 +31,7 @@ function ExpertDialog({ editing, onClose }: { editing: Expert | "new" | null; on
   const save = useMutation({
     mutationFn: () => {
       const body = {
-        name: f.name.trim(), role: nullable(f.role), channel: f.channel, email: nullable(f.email),
+        name: f.name.trim(), role: f.role.trim(), channel: f.channel, email: nullable(f.email),
         slack_user_id: nullable(f.slack_user_id), telegram_chat_id: nullable(f.telegram_chat_id), is_owner: f.is_owner,
         topics: f.topics.split(",").map((t) => t.trim()).filter(Boolean),
       }

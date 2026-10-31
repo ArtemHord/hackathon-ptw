@@ -199,3 +199,40 @@ async def test_drive_posts_the_call(monkeypatch):
         "text": "Thursday",
     }
     get_settings.cache_clear()
+
+
+@respx.mock
+async def test_drive_waits_for_agent_and_open_escalation(monkeypatch):
+    """speed 20 must not hit "answer in progress"; with no auto reply the call stays live
+    until the escalation is answered (web app "Simulate expert reply")."""
+    monkeypatch.setenv("WEBHOOK_TOKEN", WH)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    get_settings.cache_clear()
+    pauses: list[float] = []
+
+    async def no_wait(s):
+        pauses.append(s)
+
+    monkeypatch.setattr(simulate, "_pause", no_wait)
+    busy = iter([True, True, True])  # busy for the first 3 checks, then idle
+    monkeypatch.setattr(orchestrator, "is_busy", lambda _mid: next(busy, False))
+    base = "http://sim.test"
+    status = respx.post(f"{base}/webhooks/recall/status").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    respx.post(f"{base}/webhooks/recall/transcript").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    waiting = httpx.Response(200, json=[{"id": "e_1", "status": "waiting"}])
+    answered = httpx.Response(200, json=[{"id": "e_1", "status": "answered"}])
+    esc = respx.get(f"{base}/debug/escalations").mock(side_effect=[waiting, waiting, answered])
+    reply = respx.post(f"{base}/debug/expert-reply")
+
+    await simulate.drive(base, MID, "sim-bot", speed=1000, expert_reply=None)
+
+    assert pauses.count(0.2) == 3  # held the line while the agent was busy
+    assert esc.call_count == 3  # found waiting, polled until answered
+    assert not reply.called
+    events = [json.loads(c.request.content)["event"] for c in status.calls]
+    assert events[-2:] == ["bot.call_ended", "bot.done"]
+    get_settings.cache_clear()

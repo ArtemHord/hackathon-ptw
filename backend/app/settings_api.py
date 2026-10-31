@@ -178,6 +178,11 @@ class ExpertIn(BaseModel):
     telegram_chat_id: str | None = None
     is_owner: bool = False
 
+    @field_validator("role", mode="before")
+    @classmethod
+    def _role(cls, v: str | None) -> str:
+        return v or ""  # the web form sends null for an empty field
+
     @field_validator("name")
     @classmethod
     def _name(cls, v: str) -> str:

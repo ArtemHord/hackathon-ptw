@@ -30,12 +30,26 @@ DEFAULT_SPEED = 20.0
 DEFAULT_REPLY = "Thursday"
 ESCALATION_WAIT_S = 15.0
 REPLY_DELAY_S = 3.0
+IDLE_WAIT_S = 20.0  # max wait for the agent to finish before the next line
+OPEN_ESCALATION_S = 135.0  # no auto reply: keep the call open past the 2-min timeout
 
 _tasks: set[asyncio.Task] = set()
 
 
 async def _pause(seconds: float) -> None:
     await asyncio.sleep(seconds)  # one place, so tests can skip the waits
+
+
+async def _wait_idle(meeting_id: str) -> None:
+    """In-process runs only: hold the next line while the agent answers or speaks, so a
+    compressed transcript (speed 20) doesn't hit the "answer in progress" drop. No-op for the
+    CLI script (another process, the orchestrator there is always idle)."""
+    from app import orchestrator  # lazy: orchestrator imports half the app
+
+    for _ in range(int(IDLE_WAIT_S / 0.2)):
+        if not orchestrator.is_busy(meeting_id):
+            return
+        await _pause(0.2)
 
 
 def local_base_url() -> str:
@@ -110,7 +124,15 @@ async def _answer_escalation(
         say(f"no waiting escalation within {ESCALATION_WAIT_S:.0f} s")
         return
     if reply is None:
-        say("no expert reply: leaving the escalation to time out")
+        # Manual reply (web app "Simulate expert reply") or timeout: keep the call live until then.
+        say("no expert reply: call stays open until the escalation is answered or times out")
+        for _ in range(int(OPEN_ESCALATION_S)):
+            await _pause(1.0)
+            r = await http.get(f"{base}/debug/escalations?meeting_id={quote(meeting_id)}&{q}")
+            r.raise_for_status()
+            if not any(x["status"] == "waiting" for x in r.json()):
+                break
+        await _pause(3.0)  # let the answer / timeout line play before the call ends
         return
     await _pause(REPLY_DELAY_S)  # let "asking Dima now" play first
     say(f"-> expert reply: {reply!r}")
@@ -158,6 +180,7 @@ async def drive(
         clock = 0.0
         for i, line in enumerate(lines):
             await _pause(max(0.0, (line["at_s"] - clock) / speed))
+            await _wait_idle(meeting_id)
             clock = max(clock, line["at_s"])
             say(f"-> [{line['at_s']:>3}s] {line['speaker']}: {line['text']}")
             await post(tr_url, payload_transcript(bot_id, line))

@@ -241,3 +241,11 @@ async def test_seed_experts_only_when_empty(monkeypatch):
     await escalation.seed_experts()
     assert len(seeded) == 1 and seeded[0][0]["name"] == "Dima"
     get_settings.cache_clear()
+
+
+async def test_create_with_null_role(fake):
+    """The web form sends null for an empty field (verifier bug: 422 on empty Role)."""
+    async with client() as c:
+        r = await c.post("/experts", headers=AUTH, json={**DIMA, "role": None})
+    assert r.status_code == 201
+    assert r.json()["role"] == ""
