@@ -4,6 +4,7 @@ Agents and `@codex review` check PRs against this file.
 
 | # | Decision | Why |
 |---|----------|-----|
+| 28 | Transcription via `TRANSCRIPT_PROVIDER=deepgram`: `deepgram_streaming` nova-3, `keyterm` [Atlas, Hey Atlas, Okay Atlas], endpointing 300 ms; Deepgram key + project id in Recall dashboard per region; on create 400 → retry once with recallai_streaming. "Armed" wake word: alias alone arms the speaker for 6 s, next utterance = question | Live test 2: recallai dropped "Atlas" entirely; recallai key_terms only in slow mode. https://docs.recall.ai/reference/bot_create · https://docs.recall.ai/docs/deepgram |
 | 27 | Wake word = **Atlas** (`AGENT_NAME`, default Atlas); bot joins as "Atlas (AI) for Artem"; alias in first 6 words, question after it; product name stays Call Crew; system prompt told ASR is noisy | Live test 1: "Crew" never transcribed ("cat", "crap"); Artem's decision 05:15 |
 | 26 | Wake word: keep `recallai_streaming` low-latency (key_terms unsupported in that mode, R3); fuzzy trigger in first 3 tokens + question check; backup triggers `POST /meetings/{id}/ask` (app "Ask agent", contract change approved by Artem 05:10) and `/debug/ask` | Live test: "Crew" heard as "cat"/"crap"; Deepgram keyterms needs extra account + dashboard setup |
 | 25 | Orchestrator keeps all KB docs in the prompt while total < 20k chars; pgvector top-6 only above that. RAG (`rag.search`) serves `/chat` and post-call | 3 small seed docs: full context is more accurate and saves a ~300 ms embedding call on the 3–5 s voice path |
