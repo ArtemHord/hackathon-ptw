@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M6.3 wake word (senior-developer) · Artem: Slack setup — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: M6.3 Atlas rename + trigger (senior-developer) → LIVE TEST 2 → M3.5 Slack E2E (next) · Artem: Slack setup — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -53,9 +53,10 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M5.2 KB update proposals + approve / reject
 
 ### M6 · Stabilize + demo (target 08:30)
-- [ ] M6.3 Robust wake word (fuzzy, first 3 tokens) + `/debug/ask` backup (senior-developer)
-- [ ] M6.4 `POST /meetings/{id}/ask` app endpoint (contract change approved 05:10; API.pl.md + mock done by orchestrator)
-- [ ] M6.5 Redact `token=` in uvicorn WS log lines (token leaked to Railway logs → rotate WEBHOOK_TOKEN)
+- [ ] M6.3 Wake word → **Atlas** (config AGENT_NAME), alias in first 6 words, utterance/no-trigger INFO logs, noisy-ASR prompt, `/debug/ask` (senior-developer)
+- [ ] M6.3b After LIVE TEST 2: add real ASR spellings of "Atlas" as aliases (≤5 min)
+- [ ] M6.4 (after M3.5 passes) `POST /meetings/{id}/ask` app endpoint (contract change approved 05:10; API.pl.md + mock done by orchestrator)
+- [ ] M6.5 (after M3.5 passes) Redact `token=` in uvicorn WS log lines (token leaked to Railway logs → rotate WEBHOOK_TOKEN)
 - [x] M6.1 `/app/ws` all events (e2e test, real DB), tokens, CORS
 - [ ] M6.2 3 runs of the 90-s scenario on real Meet, latency measured, backup video by 09:30
 
@@ -71,7 +72,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Run: `cd backend && uv run pytest -q`; simulate: `cd backend && DATABASE_URL=… WEBHOOK_TOKEN=… DEMO_TOKEN=… uv run python ../scripts/simulate_meeting.py --speed 20` (needs running backend + DB; exit 1 if utterance events != unique lines); Recall status dashboard URL `{PUBLIC_BASE_URL}/webhooks/recall/status?token={WEBHOOK_TOKEN}`; Docker CMD uvicorn on `${PORT:-8000}`; agent-page/ outside build context → serve from backend/ (M2.1).
 
 ## Next human steps (in order)
-1. Recall dashboard status webhook `{PUBLIC_BASE_URL}/webhooks/recall/status?token=WT`
+1. ~~Recall dashboard status webhook~~ done (events arrive) `{PUBLIC_BASE_URL}/webhooks/recall/status?token=WT`
 2. Slack Request URL `{PUBLIC_BASE_URL}/webhooks/slack` Verified + Dima real email in seed/experts.json
 3. ~~seed_kb~~ done 04:28
 4. LIVE TEST 1 (join/transcript/tone) → M3.5 full run per docs/DEMO.md
@@ -79,12 +80,13 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 ## Human tasks (Artem, in parallel — we build on respx mocks, ask only for live checks)
 - [x] Supabase project (EU) + `vector`; migrate 001 applied 04:09
 - [x] Railway live 04:24: PUBLIC_BASE_URL=https://hackathon-ptw-production.up.railway.app (/health ok)
-- [ ] Recall.ai API key (eu-central-1)
+- [x] Recall.ai API key (eu-central-1)
 - [ ] Slack app (SPEC "Konfiguracja Slack app"); Request URL after M3.2 is deployed
-- [ ] ElevenLabs voice id + OpenAI key
+- [x] ElevenLabs voice id + OpenAI key
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 05:23 · LIVE TEST 1 detail · utterance rows DO arrive (Supabase), just unlogged → no log line since 04:28; trigger anchored at segment start + ASR mis-hears "Crew" · decision 27: wake word Atlas · order: M6.3 → LIVE TEST 2 → M3.5 → M6.4/M6.5
 - 05:07 · LIVE TEST 1 · Recall join OK (output_media+recording_config in one call ✓), agent page WS ✓, transcript ✓, status in_call/done ✓, fact-check ran ✓; FAIL: wake word ("Crew"→"cat"/"crap"); fix: PUBLIC_BASE_URL was missing in Railway · R3: key_terms not in low-latency → fuzzy trigger + ask endpoint (decision 26)
 - 04:28 · HUMAN · OpenAI key fixed; KB seeded on Supabase (api/roadmap/team v1)
 - 04:27 · R2 · Recall send_chat_message body confirmed; Meet 500-char cap → truncate · HUMAN: seed_kb failed, OPENAI_API_KEY wrong (key_… not sk-…)

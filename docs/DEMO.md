@@ -15,20 +15,20 @@
 1. Artem opens `meet.new` (host), copies the link.
 2. App → New call → Delegate, brief: `Done: SDK v2 shipped. Blocked: rate limit review. Don't agree to deadlines.`
    (or `curl -s -X POST $BASE/meetings -H "Authorization: Bearer $DT" -H 'content-type: application/json' -d '{"meeting_url":"<link>","mode":"delegate","brief":"Done: SDK v2 shipped. Blocked: rate limit review. Don'"'"'t agree to deadlines.","title":"Stand-up"}'`)
-3. Admit **"Call Crew (AI) for Artem"**. Orb visible in its tile.
+3. Admit **"Atlas (AI) for Artem"**. Orb visible in its tile.
 
 ## Script
 | s | Who | Says | Expect |
 |---|---|---|---|
-| 20 | Misha | "Crew, what did Artem finish this week?" | orb thinking → voice: SDK v2 (from brief), 3–5 s |
-| 35 | Misha | "Crew, when do we migrate to Postgres 17?" | "I don't know, asking Dima now." orb → ask screen; Dima gets Slack DM |
+| 20 | Misha | "Okay Atlas, what did Artem finish this week?" | orb thinking → voice: SDK v2 (from brief), 3–5 s |
+| 35 | Misha | "Atlas, when do we migrate to Postgres 17?" | "I don't know, asking Dima now." orb → ask screen; Dima gets Slack DM |
 | 45 | Dima | replies **in the thread**: "Thursday" | orb flash → "Dima says: Thursday" in call + Meet chat |
 | 60 | Misha | "Our API limit is 100 requests per second." | Meet chat: "Heads-up: api.md says … 50 rps …" |
 | 75 | Artem | app → Leave → summary (~5–10 s) → Chat: "What did Dima say about the migration?" | answer + citation (Dima, answered time) |
 | 85 | Artem | app → KB → proposals (if a "change" line was said) | Approve / Reject card |
 
 ## Fallbacks
-- Crew not heard → repeat "Crew, …" clearly at the start of the sentence (aliases: crew/cru/kru/call crew).
+- "Atlas" not heard → say "Okay Atlas, …" clearly within the first words; backup: `curl -s -X POST "$BASE/debug/ask?meeting_id=<id>&token=$WT" -H 'content-type: application/json' -d '{"text":"what did Artem finish this week?"}'`
 - Dima late or Slack down → `curl -s "$BASE/debug/escalations?meeting_id=<id>&token=$WT"` → `curl -s -X POST "$BASE/debug/expert-reply?token=$WT" -H 'content-type: application/json' -d '{"escalation_id":"<esc>","text":"Thursday"}'`
 - No sound → `curl -X POST "$BASE/debug/say-tone?meeting_id=<id>&token=$WT"`; if silent, Recall Bot Explorer → Remote DevTools console ("play() rejected").
 - Bot stuck in waiting room → host admits; auto-leaves after 600 s.

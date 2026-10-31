@@ -55,9 +55,9 @@ Co robi użytkownik w MVP:
 | Sekundy | Kto | Co się dzieje |
 | --- | --- | --- |
 | 0–10 | Artem | „Na stand-up zamiast mnie pójdzie Crew”. Wkleja link Google Meet w aplikacji, tryb „Delegat”. |
-| 10–20 | Bot | Wchodzi do Meet jako „Call Crew (AI) for Artem”. |
-| 20–35 | Misza | „Crew, what did Artem finish this week?” — agent odpowiada z briefu głosem ElevenLabs. |
-| 35–60 | Misza | „Crew, when do we migrate to Postgres 17?” — „I don’t know, asking Dima now”. Na scenie „Dima” dostaje wiadomość na Slacku, odpisuje „Thursday”, agent w rozmowie: „Dima says: Thursday”. **Wow-moment.** |
+| 10–20 | Bot | Wchodzi do Meet jako „Atlas (AI) for Artem”. |
+| 20–35 | Misza | „Atlas, what did Artem finish this week?” — agent odpowiada z briefu głosem ElevenLabs. |
+| 35–60 | Misza | „Atlas, when do we migrate to Postgres 17?” — „I don’t know, asking Dima now”. Na scenie „Dima” dostaje wiadomość na Slacku, odpisuje „Thursday”, agent w rozmowie: „Dima says: Thursday”. **Wow-moment.** |
 | 60–75 | Misza | „Our API limit is 100 requests per second” — na czacie Meet: „Docs say 50 rps (api.md). Update?” |
 | 75–90 | Artem | W aplikacji: podsumowanie rozmowy, pytanie „What did Dima say about the migration?” z odpowiedzią i cytatem, w skrzynce — propozycja aktualizacji dokumentu. |
 
@@ -131,7 +131,7 @@ Dlaczego nie pełny agent w rozmowie: dźwięk wszystkich uczestników przychodz
 Co się dzieje, gdy ktoś woła agenta:
 
 1. Recall wysyła `transcript.data` (kto mówił, tekst, czas) na `/webhooks/recall/transcript`.
-2. Orkiestrator szuka zwrotu „Crew” na początku wypowiedzi, razem z typowymi błędami rozpoznawania (crew, cru, call crew).
+2. Orkiestrator szuka imienia „Atlas” (aliasy: atlas, hey/okay atlas, atlass, atlis; „at last” tylko na początku) w pierwszych 6 słowach wypowiedzi; pytanie = tekst po imieniu. (Zmiana z „Crew” po teście na żywo, decyzja 27.)
 3. Zbiera kontekst: ostatnie 2 minuty transkryptu, brief właściciela, 6 najbliższych fragmentów bazy wiedzy (pgvector; do M4 dokumenty idą wprost do promptu).
 4. LLM OpenAI zwraca JSON: `{answer, confidence, needs_expert, topic}`.
 5. Jeśli `needs_expert = true` albo `confidence < 0.6`, startuje eskalacja, a agent mówi „I don’t know, asking Dima now”.

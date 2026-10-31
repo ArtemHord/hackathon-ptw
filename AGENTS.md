@@ -1,7 +1,7 @@
 # AGENTS.md — rules for every coding agent (Claude Code, Codex)
 
 ## Project
-Call Crew: an AI agent joins Google Meet / Zoom / Teams through Recall.ai, takes notes, answers for its owner when someone says "Crew, …", and when it does not know, asks the right expert on Slack and speaks the expert's answer back in the same call.
+Call Crew: an AI agent joins Google Meet / Zoom / Teams through Recall.ai, takes notes, answers for its owner when someone says "Atlas, …" (wake word, config `AGENT_NAME`), and when it does not know, asks the right expert on Slack and speaks the expert's answer back in the same call.
 **SPEC.md (Polish, symlink to `docs/SPEC.pl.md` — edit the file in `docs/`) is the source of truth.** It is ~450 lines: read only the sections your task needs. Hero feature = the Slack escalation loop (SPEC: "Eskalacja na Slacku"). If an issue contradicts SPEC.md, follow SPEC.md and say so in the PR.
 Everything the agent says or writes in a call is in English (demo language).
 
