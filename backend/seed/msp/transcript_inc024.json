@@ -1,0 +1,47 @@
+[
+  {
+    "speaker": "Kamil",
+    "text": "NovaStore can't complete payments, and the product prices are incorrect. I'm opening a SEV1 war room.",
+    "at_s": 4
+  },
+  {
+    "speaker": "Marek",
+    "text": "The payment gateway may be to blame, but I don't have evidence yet.",
+    "at_s": 12
+  },
+  {
+    "speaker": "Marek",
+    "text": "Atlas, have we had a similar outage before with both symptoms, failed payments and wrong prices?",
+    "at_s": 18
+  },
+  {
+    "speaker": "Marek",
+    "text": "Atlas, what should we check safely before we change any configuration?",
+    "at_s": 55
+  },
+  {
+    "speaker": "Kamil",
+    "text": "Atlas, ask Ola how to verify it, she has experience with this problem.",
+    "at_s": 92
+  },
+  {
+    "speaker": "Marek",
+    "text": "In the simulation we confirmed an expired token in the CRM Bridge logs. I approved a test on staging.",
+    "at_s": 135
+  },
+  {
+    "speaker": "Kamil",
+    "text": "After our approval we briefly disabled the integration, checkout went through and the prices are correct.",
+    "at_s": 150
+  },
+  {
+    "speaker": "Marek",
+    "text": "In the simulation we restored the authorization and the CRM synchronization. The tests of both processes pass.",
+    "at_s": 165
+  },
+  {
+    "speaker": "Kamil",
+    "text": "Atlas, summarize the incident and the follow-ups, without adding anything we haven't observed.",
+    "at_s": 185
+  }
+]

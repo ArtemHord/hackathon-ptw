@@ -6,9 +6,9 @@ Auth: `?token=WEBHOOK_TOKEN` (scripts) or `Authorization: Bearer DEMO_TOKEN` (we
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app import db, escalation, orchestrator, simulate
+from app import db, escalation, orchestrator, profile, simulate
 from app.config import get_settings
 from app.meetings import ApiError, demo_token_ok, error_response
 from app.webhooks_recall import _spawn, _token_ok
@@ -35,7 +35,7 @@ class ExpertReply(BaseModel):
 
 class SimulateBody(BaseModel):
     speed: float = simulate.DEFAULT_SPEED
-    expert_reply: str | None = simulate.DEFAULT_REPLY
+    expert_reply: str | None = Field(default_factory=profile.sim_default_reply)
 
 
 @router.post("/expert-reply")

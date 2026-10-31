@@ -29,6 +29,14 @@
 
 > Wait until Atlas finishes speaking (orb back to idle) before the next "Atlas, …": a trigger said while it speaks is dropped.
 
+## Between runs (Postgres 17 must escalate every time)
+Atlas now answers from past expert answers (M8.1b). After a run, "Dima: Thursday" is a stored fact, so the next run would answer "Dima said Thursday" instead of asking Slack. Before each run, in the Supabase SQL editor:
+```sql
+select id, kind, left(text, 80) from facts where text ilike '%postgres 17%' or (text ilike '%thursday%' and text ilike '%migrat%');
+-- check the rows, then (deletes data, Artem's call):
+delete from facts where text ilike '%postgres 17%' or (text ilike '%thursday%' and text ilike '%migrat%');
+```
+
 ## Fallbacks
 - "Atlas" not heard → say "Okay Atlas, …" clearly within the first words; backup: `curl -s -X POST "$BASE/debug/ask?meeting_id=<id>&token=$WT" -H 'content-type: application/json' -d '{"text":"what did Artem finish this week?"}'`
 - Dima late or Slack down → `curl -s "$BASE/debug/escalations?meeting_id=<id>&token=$WT"` → `curl -s -X POST "$BASE/debug/expert-reply?token=$WT" -H 'content-type: application/json' -d '{"escalation_id":"<esc>","text":"Thursday"}'`

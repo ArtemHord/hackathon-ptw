@@ -57,6 +57,7 @@ export interface TestResult { ok: boolean; detail: string; bot_username?: string
 export interface Expert {
   id: string; name: string; role: string | null; topics: string[]; channel: "slack" | "telegram"
   email: string | null; slack_user_id: string | null; telegram_chat_id: string | null; is_owner: boolean
+  profile?: "acme" | "msp"
 }
 export type ExpertInput = Partial<Omit<Expert, "id">>
 

@@ -1,0 +1,315 @@
+{
+  "meetings": [
+    {
+      "id": "INC-007",
+      "title": "INC-007 - NovaStore - wrong payment gateway key",
+      "started_at": "2026-07-03T09:11:00Z",
+      "ended_at": "2026-07-03T09:21:00Z",
+      "summary": "Checkout reported authorization errors while prices were correct. Marek found HTTP 401 in the payment gateway logs: the gateway used the wrong key for the active environment. After the approved key update the transaction test passed. Kamil asked not to link it automatically to other checkout errors.",
+      "decisions": [
+        "Update the gateway key for the active environment (approved)."
+      ],
+      "action_items": [],
+      "utterances": [
+        {
+          "speaker": "Kamil",
+          "text": "Checkout reports authorization errors, but the product prices are correct. The payment provider has just changed the test environment.",
+          "ts_start": 0
+        },
+        {
+          "speaker": "Marek",
+          "text": "In the payment gateway logs: HTTP 401. Our gateway is using the wrong key for the active environment.",
+          "ts_start": 180
+        },
+        {
+          "speaker": "Marek",
+          "text": "After the approved key update the transaction test passes. No symptoms related to Salesforce or price display.",
+          "ts_start": 480
+        },
+        {
+          "speaker": "Kamil",
+          "text": "Summary: INC-007 was directly about the payment gateway configuration. Let's not automatically link it to other checkout errors.",
+          "ts_start": 600
+        }
+      ],
+      "facts": [
+        {
+          "speaker": "Marek",
+          "kind": "owner",
+          "text": "INC-007 root cause: payment gateway used the wrong key for the active environment, HTTP 401 from the gateway, prices correct (Marek, 09:14)"
+        },
+        {
+          "speaker": "Marek",
+          "kind": "decision",
+          "text": "INC-007 fixed by an approved gateway key update; no Salesforce or price-display symptoms (Marek, 09:19)"
+        }
+      ]
+    },
+    {
+      "id": "INC-010",
+      "title": "INC-010 - NovaStore - incorrect promotional prices",
+      "started_at": "2026-08-05T11:10:00Z",
+      "ended_at": "2026-08-05T11:22:00Z",
+      "summary": "Promotional prices were wrong on the product page while payments worked. Marek traced it to an incorrect discount plugin rule after the promotion schedule changed. Patrycja corrected the rule and prices returned to normal; checkout and Salesforce were fine throughout.",
+      "decisions": [
+        "Correct the discount plugin rule."
+      ],
+      "action_items": [],
+      "utterances": [
+        {
+          "speaker": "Patrycja",
+          "text": "Promotional prices are wrong on the product page, but actual payments go through without errors.",
+          "ts_start": 0
+        },
+        {
+          "speaker": "Marek",
+          "text": "The cause is an incorrect rule in the discount plugin after the promotion schedule changed.",
+          "ts_start": 240
+        },
+        {
+          "speaker": "Patrycja",
+          "text": "Rule fixed, prices are back to normal. Salesforce reports no problems and checkout worked the whole time.",
+          "ts_start": 720
+        }
+      ],
+      "facts": [
+        {
+          "speaker": "Marek",
+          "kind": "owner",
+          "text": "INC-010 root cause: incorrect discount plugin rule after the promotion schedule changed (Marek, 11:14)"
+        },
+        {
+          "speaker": "Patrycja",
+          "kind": "decision",
+          "text": "INC-010: rule corrected, prices back to normal; checkout worked the whole time, Salesforce reported no problems (Patrycja, 11:22)"
+        }
+      ]
+    },
+    {
+      "id": "INC-011",
+      "title": "INC-011 - NovaStore - payment failures and wrong prices",
+      "started_at": "2026-08-18T14:02:00Z",
+      "ended_at": "2026-08-18T15:05:00Z",
+      "summary": "Every checkout payment failed and promotional prices were wrong (SEV1). Gateway was suspected but not confirmed. CRM Bridge logs showed auth_failure and access token expired. After a staging test, Kamil approved temporarily disabling the integration in production; checkout then worked. Ola confirmed the cause: the Salesforce API token used by CRM Bridge had expired. After re-authorization at 15:05 payment and sync tests passed. Checklist added; Ola owns the runbook.",
+      "decisions": [
+        "Test the Salesforce plugin isolation on staging first, then disable it in production only after Kamil's approval.",
+        "Kamil approved temporarily disabling the faulty integration in production at 14:15; record the rollback and the risk of CRM sync delay.",
+        "Add a checklist: checkout fails plus wrong prices -> check integration logs and expired tokens, not just the payment gateway."
+      ],
+      "action_items": [
+        {
+          "owner": "Ola",
+          "text": "Own the checkout-fails-plus-wrong-prices checklist (runbook owner)",
+          "due": null
+        },
+        {
+          "owner": "Marek",
+          "text": "Monitor new orders and the missing synchronization to Salesforce",
+          "due": null
+        }
+      ],
+      "utterances": [
+        {
+          "speaker": "Kamil",
+          "text": "NovaStore reports that every payment at checkout ends with an error. At the same time the promotional prices look incorrect. This is SEV1, customer support confirms real impact.",
+          "ts_start": 0
+        },
+        {
+          "speaker": "Marek",
+          "text": "At first I suspected the payment gateway, but I see no outage notice in the provider's panel. A suspicion alone is not a cause.",
+          "ts_start": 120
+        },
+        {
+          "speaker": "Ola",
+          "text": "Remember the Salesforce integration. It touches the data synchronization used in the shop. Let's check the CRM Bridge logs, and not change the payment configuration right away.",
+          "ts_start": 240
+        },
+        {
+          "speaker": "Marek",
+          "text": "In the CRM Bridge logs we have repeated auth_failure responses and the message access token expired. That is a log from our Salesforce integration, not a 401 returned by the gateway.",
+          "ts_start": 360
+        },
+        {
+          "speaker": "Kamil",
+          "text": "Have we confirmed this plugin's link to checkout? First a test on staging, then possibly disabling it in production after my approval.",
+          "ts_start": 480
+        },
+        {
+          "speaker": "Ola",
+          "text": "On staging, after temporarily disabling the Salesforce plugin, the prices returned to normal and the test order went through. That is strong evidence of a dependency, but in production we act in a controlled way.",
+          "ts_start": 600
+        },
+        {
+          "speaker": "Kamil",
+          "text": "I approve temporarily disabling the faulty integration in production. Record the rollback and the risk of CRM sync delay.",
+          "ts_start": 780
+        },
+        {
+          "speaker": "Marek",
+          "text": "The integration has been temporarily disabled. The checkout test in production succeeded. We are monitoring new orders and the missing synchronization to Salesforce.",
+          "ts_start": 900
+        },
+        {
+          "speaker": "Ola",
+          "text": "Cause confirmed: the Salesforce API token used by the CRM Bridge plugin expired. Interim fix: isolate the plugin, then safely re-authorize and restore synchronization.",
+          "ts_start": 1020
+        },
+        {
+          "speaker": "Kamil",
+          "text": "We're adding a checklist: checkout fails plus wrong prices -> check integration logs and expired tokens, not just the payment gateway. Ola is the runbook owner.",
+          "ts_start": 1140
+        },
+        {
+          "speaker": "Ola",
+          "text": "After replacing the authorization and restarting the integration, the payment and Salesforce synchronization tests pass.",
+          "ts_start": 3780
+        }
+      ],
+      "facts": [
+        {
+          "speaker": "Ola",
+          "kind": "owner",
+          "text": "INC-011 root cause: expired Salesforce API token in CRM Bridge (Ola, 14:19)"
+        },
+        {
+          "speaker": "Marek",
+          "kind": "owner",
+          "text": "INC-011 evidence: CRM Bridge logs showed repeated auth_failure and access token expired, not a gateway 401 (Marek, 14:08)"
+        },
+        {
+          "speaker": "Kamil",
+          "kind": "decision",
+          "text": "INC-011: Kamil approved temporarily disabling the faulty integration in production at 14:15, after a staging test (Ola, 14:12)"
+        },
+        {
+          "speaker": "Ola",
+          "kind": "owner",
+          "text": "INC-011: Ola is the owner of RUNBOOK-WC-CRM-01 (Kamil, 14:21)"
+        },
+        {
+          "speaker": "Ola",
+          "kind": "date",
+          "text": "INC-011: payment and Salesforce sync tests passed after re-authorization at 15:05 on 2026-08-18 (Ola)"
+        }
+      ]
+    },
+    {
+      "id": "INC-016",
+      "title": "INC-016 - NovaStore - payment provider outage",
+      "started_at": "2026-09-02T16:22:00Z",
+      "ended_at": "2026-09-02T16:45:00Z",
+      "summary": "Payments failed but prices were correct. The provider's public status confirmed an outage of their API and there were no CRM Bridge errors. The provider restored service at 16:45; the shop's integration was not changed.",
+      "decisions": [],
+      "action_items": [],
+      "utterances": [
+        {
+          "speaker": "Kamil",
+          "text": "Payments are not going through, but the product prices are correct.",
+          "ts_start": 0
+        },
+        {
+          "speaker": "Marek",
+          "text": "The provider's public status confirms an outage of their API. No errors in the CRM Bridge logs.",
+          "ts_start": 120
+        },
+        {
+          "speaker": "Marek",
+          "text": "The provider restored the service. We did not change the shop's integration.",
+          "ts_start": 1380
+        }
+      ],
+      "facts": [
+        {
+          "speaker": "Marek",
+          "kind": "owner",
+          "text": "INC-016: payment failures with correct prices were a provider API outage confirmed by the provider's public status (Marek, 16:24)"
+        },
+        {
+          "speaker": "Marek",
+          "kind": "decision",
+          "text": "INC-016: the provider restored the service at 16:45; the shop's integration was not changed (Marek)"
+        }
+      ]
+    },
+    {
+      "id": "INC-019",
+      "title": "INC-019 - NovaStore - 503 from the reverse proxy",
+      "started_at": "2026-09-20T13:30:00Z",
+      "ended_at": "2026-09-20T13:43:00Z",
+      "summary": "The whole shop returned HTTP 503. The reverse proxy indicated backend overload after a deploy, and the faulty deployment was rolled back. Kamil confirmed the service responded correctly and that there was no connection to the Salesforce token.",
+      "decisions": [
+        "Roll back the faulty deployment per procedure."
+      ],
+      "action_items": [],
+      "utterances": [
+        {
+          "speaker": "Patrycja",
+          "text": "The whole shop returns HTTP 503, you can't even open the cart. This is not an error of the payment itself.",
+          "ts_start": 0
+        },
+        {
+          "speaker": "Marek",
+          "text": "The reverse proxy indicates backend overload after a deploy. We are rolling back the faulty deployment per procedure.",
+          "ts_start": 240
+        },
+        {
+          "speaker": "Kamil",
+          "text": "The service responds correctly. No connection to the Salesforce token.",
+          "ts_start": 780
+        }
+      ],
+      "facts": [
+        {
+          "speaker": "Patrycja",
+          "kind": "owner",
+          "text": "INC-019: the whole shop returned HTTP 503, not a payment error (Patrycja, 13:30)"
+        },
+        {
+          "speaker": "Marek",
+          "kind": "decision",
+          "text": "INC-019: reverse proxy showed backend overload after a deploy; faulty deployment rolled back (Marek, 13:34)"
+        }
+      ]
+    },
+    {
+      "id": "INC-022",
+      "title": "INC-022 - NovaStore - delayed CRM synchronization",
+      "started_at": "2026-10-08T10:12:00Z",
+      "ended_at": "2026-10-08T10:29:00Z",
+      "summary": "New contacts synchronized to Salesforce with a delay while checkout and prices worked correctly. The processing queue was long but Salesforce authentication was active. Ola increased the synchronization throughput; there was no sales outage.",
+      "decisions": [
+        "Increase the synchronization process throughput."
+      ],
+      "action_items": [],
+      "utterances": [
+        {
+          "speaker": "Ola",
+          "text": "In Salesforce we see a delay in synchronizing new contacts. Checkout and prices in WooCommerce work correctly.",
+          "ts_start": 0
+        },
+        {
+          "speaker": "Marek",
+          "text": "The processing queue is long, but authentication to Salesforce is active.",
+          "ts_start": 180
+        },
+        {
+          "speaker": "Ola",
+          "text": "We increased the synchronization process throughput. There was no sales outage.",
+          "ts_start": 1020
+        }
+      ],
+      "facts": [
+        {
+          "speaker": "Ola",
+          "kind": "owner",
+          "text": "INC-022: delayed Salesforce sync of new contacts; checkout and prices worked correctly (Ola, 10:12)"
+        },
+        {
+          "speaker": "Ola",
+          "kind": "decision",
+          "text": "INC-022: synchronization throughput increased; no sales outage (Ola, 10:29)"
+        }
+      ]
+    }
+  ]
+}

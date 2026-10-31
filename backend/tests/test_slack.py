@@ -69,11 +69,11 @@ async def test_send_question_chain_and_text():
     body = json.loads(post.calls[0].request.content)
     assert body["channel"] == "D1" and "thread_ts" not in body
     text = body["text"]
-    assert text.startswith('*Call Crew* — question from the call "Q3 &lt;infra&gt; sync"')
+    assert text.startswith('<@U_DIMA> *Call Crew* — question from the call "Q3 &lt;infra&gt; sync"')
     assert "Anna" in text
     assert "> What is the Postgres 17 upgrade date?" in text
     assert "a: one" not in text and all(x in text for x in ("b: two", "c: three", "d: four"))
-    assert text.endswith("Reply in this thread and I'll read it out in the call.")
+    assert text.endswith("Reply here (or in this thread) and I'll read it out in the call.")
 
 
 @respx.mock

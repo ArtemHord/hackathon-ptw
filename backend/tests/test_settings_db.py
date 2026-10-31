@@ -107,10 +107,12 @@ def test_experts_crud_and_seed_once(client):
     assert client.delete(f"/experts/{dima['id']}", headers=AUTH).json()["deleted"] is True
 
     async def reseed():
+        before = await db.count_experts()  # acme + msp seed; -1 Dima +1 Olga
         await escalation.seed_experts()
-        return await db.count_experts()
+        await escalation.seed_msp_experts()
+        return before, await db.count_experts()
 
-    before = len(items)  # seed size; -1 Dima +1 Olga
-    assert client.portal.call(reseed) == before  # not reseeded: table not empty
+    before, after = client.portal.call(reseed)
+    assert after == before  # not reseeded: both profiles still have experts
     names = [e["name"] for e in client.get("/experts", headers=AUTH).json()["items"]]
     assert "Dima" not in names and "Olga" in names

@@ -110,6 +110,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 10:13 · merge · origin/main (Julian PR #4: profiles acme/msp, ask-by-name) + M10.1; orchestrator conflict resolved (both kept); 374 tests, ruff, mini smoke ok; review no blockers · local; push waits for "no bot in call" (≤10:25). DEMO.md: delete stored Postgres-17 answer facts before each run
 - 10:16 · M10.1 · review: no blockers (333 tests, ruff) · local commit; push waits for Julian "no bot in call" (deadline 10:25)
 - 10:09 · M10.1 · built: Postgres 17 escalates 5/5 (tools) + 5/5 (no tools); "Friday" → owner; rate limit 50 rps no web; Python → web_search 3.6 s; Canberra 1.7 s; follow-up "and why" ok; non-escalation 1.7–4.0 s; 333 tests · in review (before 10:15 checkpoint) · —
 - 10:00 · step 0 · main checkout was on branch IOS since 09:37 → back to main; local smoke DB callcrew on 55449 created; M10.1 → senior-developer · —

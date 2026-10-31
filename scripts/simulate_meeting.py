@@ -39,7 +39,11 @@ async def main() -> int:
     ap.add_argument("--base", default="http://localhost:8000")
     ap.add_argument("--speed", type=float, default=5.0)
     ap.add_argument("--meeting-id")
-    ap.add_argument("--expert-reply", default="Thursday", help="text of the simulated expert reply")
+    ap.add_argument(
+        "--expert-reply",
+        default=None,
+        help="text of the simulated expert reply (default: the demo profile's reply)",
+    )
     ap.add_argument("--no-reply", action="store_true", help="do not simulate an expert reply")
     args = ap.parse_args()
 
@@ -63,7 +67,7 @@ async def main() -> int:
         meeting_id,
         bot_id,
         speed=args.speed,
-        expert_reply=None if args.no_reply else args.expert_reply,
+        expert_reply=None if args.no_reply else (args.expert_reply or ...),
         say=print,
     )
     await asyncio.sleep(1.5)  # let late events (agent replies etc.) arrive

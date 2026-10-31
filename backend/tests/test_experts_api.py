@@ -122,6 +122,7 @@ async def test_crud_roundtrip(fake):
             "slack_user_id": None,
             "telegram_chat_id": None,
             "is_owner": False,
+            "profile": "acme",
         }
         # caches invalidated: escalation sees the new expert, the prompt list is rebuilt
         assert [e.name for e in escalation._cache] == ["Dima"]
@@ -224,8 +225,10 @@ async def test_seed_experts_only_when_empty(monkeypatch):
     async def upsert_experts(items):
         seeded.append(items)
 
+    rows = [{"name": "Dima", "topics": ["infra"]}, {"name": "Ola", "topics": ["profile:msp"]}]
+
     async def list_experts():
-        return []
+        return rows
 
     monkeypatch.setattr(db, "count_experts", count_experts)
     monkeypatch.setattr(db, "upsert_experts", upsert_experts)
@@ -238,6 +241,7 @@ async def test_seed_experts_only_when_empty(monkeypatch):
         return 0
 
     monkeypatch.setattr(db, "count_experts", count_zero)
+    rows[:] = rows[1:]  # only an msp expert left: acme is seeded again
     await escalation.seed_experts()
     assert len(seeded) == 1 and seeded[0][0]["name"] == "Dima"
     get_settings.cache_clear()

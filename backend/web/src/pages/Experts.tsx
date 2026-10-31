@@ -111,7 +111,8 @@ export default function Experts() {
           {data?.items.map((e) => (
             <TableRow key={e.id}>
               <TableCell className="font-medium">
-                {e.name} {e.is_owner && <Badge variant="secondary">owner</Badge>}
+                {e.name} {e.is_owner && <Badge variant="secondary">owner</Badge>}{" "}
+                {e.profile && e.profile !== "acme" && <Badge variant="outline">{e.profile}</Badge>}
               </TableCell>
               <TableCell>{e.role}</TableCell>
               <TableCell className="space-x-1">{e.topics.map((t) => <Badge key={t} variant="outline">{t}</Badge>)}</TableCell>

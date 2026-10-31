@@ -11,23 +11,22 @@ import logging
 import os
 import uuid
 from collections.abc import Callable
-from pathlib import Path
+from types import EllipsisType
 from urllib.parse import quote
 
 import httpx
 
-from app import db
+from app import db, profile
 from app.config import get_settings
 
 log = logging.getLogger(__name__)
 
-FIXTURE = Path(__file__).resolve().parent.parent / "seed" / "demo_transcript.json"
-BRIEF = (
-    "This week Artem finished the Slack escalation flow and the Postgres 16 tuning. "
-    "He is working on the auth token cache. He cannot promise dates."
-)
+# M10: fixture, brief, title and default expert reply come from the demo profile (profile.py).
+FIXTURE = profile.SEED_ROOT / "demo_transcript.json"  # acme fixture; see profile.fixture_path()
+BRIEF = profile.ACME_BRIEF
 DEFAULT_SPEED = 20.0
-DEFAULT_REPLY = "Thursday"
+DEFAULT_REPLY = profile.ACME_SIM_REPLY
+ExpertReply = str | None | EllipsisType  # ... = the profile's default reply
 ESCALATION_WAIT_S = 15.0
 REPLY_DELAY_S = 3.0
 IDLE_WAIT_S = 20.0  # max wait for the agent to finish before the next line
@@ -83,7 +82,11 @@ def payload_status(bot_id: str, event: str) -> dict:
 
 
 def load_lines() -> list[dict]:
-    return json.loads(FIXTURE.read_text())
+    return json.loads(profile.fixture_path().read_text(encoding="utf-8"))
+
+
+def resolve_reply(expert_reply: ExpertReply) -> str | None:
+    return profile.sim_default_reply() if expert_reply is ... else expert_reply
 
 
 async def prepare(meeting_id: str | None = None) -> tuple[str, str]:
@@ -96,7 +99,7 @@ async def prepare(meeting_id: str | None = None) -> tuple[str, str]:
         return meeting_id, meeting["recall_bot_id"]
     bot_id = f"sim-{uuid.uuid4()}"
     m = await db.insert_meeting(
-        title="Simulated stand-up",
+        title=profile.sim_title(),
         platform="google_meet",
         meeting_url="https://meet.google.com/sim-demo",
         mode="delegate",
@@ -104,7 +107,7 @@ async def prepare(meeting_id: str | None = None) -> tuple[str, str]:
         started_at=None,
     )
     await db.update_meeting(m["id"], recall_bot_id=bot_id)
-    await db.insert_brief(m["id"], BRIEF)
+    await db.insert_brief(m["id"], profile.sim_brief())
     return m["id"], bot_id
 
 
@@ -154,7 +157,7 @@ async def drive(
     bot_id: str,
     *,
     speed: float = DEFAULT_SPEED,
-    expert_reply: str | None = DEFAULT_REPLY,
+    expert_reply: ExpertReply = ...,
     say: Callable[[str], None] = log.info,
 ) -> int:
     """Post the whole call (status, transcript lines + one duplicate, expert reply, end).
@@ -162,6 +165,7 @@ async def drive(
     s = get_settings()
     base = base.rstrip("/")
     lines = load_lines()
+    expert_reply = resolve_reply(expert_reply)
     token = quote(s.WEBHOOK_TOKEN)
     status_url = f"{base}/webhooks/recall/status?token={token}"
     tr_url = f"{base}/webhooks/recall/transcript?meeting_id={quote(meeting_id)}&token={token}"
@@ -214,7 +218,7 @@ async def _drive_logged(base: str, meeting_id: str, bot_id: str, **kw) -> None:
 async def run(
     base_url: str | None = None,
     speed: float = DEFAULT_SPEED,
-    expert_reply: str | None = DEFAULT_REPLY,
+    expert_reply: ExpertReply = ...,
 ) -> str:
     """Insert the meeting, start posting webhooks in the background, return the meeting id."""
     meeting_id, bot_id = await prepare()

@@ -5,7 +5,10 @@ conversations.open {users} -> channel.id, chat.postMessage {channel, text, threa
 auth.test -> user_id. Errors come back as HTTP 200 with {"ok": false, "error": "..."}.
 """
 
+import difflib
 import logging
+import re
+import time
 from typing import Any
 
 import httpx
@@ -20,6 +23,28 @@ log = logging.getLogger(__name__)
 SLACK_API = "https://slack.com/api"
 TIMEOUT_S = 10.0
 CONTEXT_LINES = 3
+MEMBERS_TTL_S = 120.0
+NAME_MATCH_MIN = 0.8  # "Artem", "Julian Pulawski", "Mikhail" (-> mikhailtroian), ASR typos
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def name_score(query: str, field: str) -> float:
+    """0..1 how well a spoken name matches a Slack name field (real, display or user name)."""
+    qn, fn = _norm(query), _norm(field)
+    if not qn or not fn:
+        return 0.0
+    if qn == fn:
+        return 1.0
+    q_tok = re.findall(r"[a-z0-9]+", query.lower())
+    f_tok = re.findall(r"[a-z0-9]+", field.lower())
+    if q_tok and all(any(f.startswith(q) for f in f_tok) for q in q_tok):
+        return 0.95  # "artem" -> "Artem Hordiienko"
+    if len(qn) >= 4 and fn.startswith(qn):
+        return 0.9  # "mikhail" -> "mikhailtroian"
+    return difflib.SequenceMatcher(None, qn, fn).ratio()  # "juliana pulawski", "mikhailtoian"
 
 
 def _esc(s: str) -> str:
@@ -42,7 +67,7 @@ def format_question(
     ctx = [c for c in context_lines if c and c.strip()][-CONTEXT_LINES:]
     if ctx:
         parts.append("_Recent context:_\n" + "\n".join(f"• {_esc(c)}" for c in ctx))
-    parts.append("Reply in this thread and I'll read it out in the call.")
+    parts.append("Reply here (or in this thread) and I'll read it out in the call.")
     return "\n".join(parts)
 
 
@@ -50,10 +75,41 @@ class SlackNotifier:
     def __init__(self) -> None:
         self._email_cache: dict[str, str] = {}
         self._bot_user_id: str | None = None
+        self._members: list[dict[str, Any]] = []
+        self._members_at = 0.0
 
     def reset(self) -> None:
         self._email_cache.clear()
         self._bot_user_id = None
+        self._members = []
+        self._members_at = 0.0
+
+    async def members(self) -> list[dict[str, Any]]:
+        """Human workspace members (users.list, needs users:read), cached for a few minutes."""
+        if not self._members or time.monotonic() - self._members_at > MEMBERS_TTL_S:
+            data = await self._call("users.list", params={"limit": 500})
+            self._members = [
+                m
+                for m in data.get("members") or []
+                if not m.get("is_bot") and not m.get("deleted") and m.get("id") != "USLACKBOT"
+            ]
+            self._members_at = time.monotonic()
+        return self._members
+
+    async def find_user(self, name: str) -> dict[str, str] | None:
+        """{"id", "name"} of the workspace member a spoken name refers to, else None."""
+        best, best_score = None, 0.0
+        for m in await self.members():
+            p = m.get("profile") or {}
+            fields = [p.get("real_name"), p.get("display_name"), m.get("real_name"), m.get("name")]
+            score = max((name_score(name, f) for f in fields if f), default=0.0)
+            if score > best_score:
+                best, best_score = m, score
+        if best is None or best_score < NAME_MATCH_MIN:
+            return None
+        p = best.get("profile") or {}
+        label = p.get("real_name") or p.get("display_name") or best.get("name") or best["id"]
+        return {"id": best["id"], "name": label}
 
     async def _call(
         self, method: str, *, json: dict[str, Any] | None = None, params: dict | None = None
@@ -121,13 +177,15 @@ class SlackNotifier:
             question=question,
             context_lines=context_lines,
         )
-        return await self._dm(expert, text)
+        return await self._dm(expert, text, mention=True)
 
     async def send_text(self, expert: Expert, text: str) -> SentMessage:
         return await self._dm(expert, text)
 
-    async def _dm(self, expert: Expert, text: str) -> SentMessage:
+    async def _dm(self, expert: Expert, text: str, mention: bool = False) -> SentMessage:
         user_id = await self.resolve_user(expert)
+        if mention:
+            text = f"<@{user_id}> {text}"  # tagged, so it reads as addressed to them
         opened = await self._call("conversations.open", json={"users": user_id})
         channel = (opened.get("channel") or {}).get("id")
         if not channel:
