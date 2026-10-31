@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from app import (
     agent_voice,
+    chat,
     db,
     debug,
     escalation,
@@ -42,6 +43,7 @@ app.include_router(meetings.router)
 app.include_router(webhooks_recall.router)
 app.include_router(webhooks_slack.router)
 app.include_router(kb.router)
+app.include_router(chat.router)
 app.include_router(hub.router)
 app.include_router(agent_voice.router)
 app.include_router(speech.router)

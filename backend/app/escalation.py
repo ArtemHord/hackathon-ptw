@@ -305,6 +305,12 @@ async def _on_reply(channel_id: str, thread_ts: str, text: str, user_id: str) ->
             db.insert_fact(meeting_id, expert, f"Q: {row['question']}\nA: {text}", "answer"),
             "insert fact",
         )
+        try:  # make the fresh fact searchable by /chat right away
+            from app import rag
+
+            rag.backfill_later()
+        except Exception:
+            log.exception("backfill_later failed")
     await _try(
         hub.publish(meeting_id, "escalation_answered", public(row, expert)), "publish answered"
     )

@@ -636,3 +636,30 @@ async def set_embeddings(table: str, items: list[tuple[str, list[float]]]) -> No
         f"update {table} set embedding = $2::vector where id = $1",
         [(i, vec_literal(v)) for i, v in items],
     )
+
+
+# --- chat --------------------------------------------------------------------
+
+
+async def insert_chat_message(role: str, text: str, citations: list[dict[str, Any]]) -> None:
+    pool = await get_pool()
+    await pool.execute(
+        "insert into chat_messages (role, text, citations) values ($1, $2, $3::jsonb)",
+        role,
+        text,
+        json.dumps(citations),
+    )
+
+
+async def answered_ts_for_expert(meeting_id: str, expert_name: str) -> int | None:
+    """Latest answered_ts of an answered escalation by this expert in the meeting."""
+    pool = await get_pool()
+    v = await pool.fetchval(
+        """select e.answered_ts from escalations e join experts x on x.id = e.expert_id
+           where e.meeting_id::text = $1 and x.name = $2 and e.status = 'answered'
+             and e.answered_ts is not null
+           order by e.answered_ts desc limit 1""",
+        meeting_id,
+        expert_name,
+    )
+    return int(v) if v is not None else None

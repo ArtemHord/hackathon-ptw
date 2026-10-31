@@ -9,7 +9,7 @@ import httpx
 import pytest
 import respx
 
-from app import db, escalation, hub, llm, orchestrator, recall, speech
+from app import db, escalation, hub, llm, orchestrator, rag, recall, speech
 from app.config import get_settings
 from app.notifier import base as notifier_base
 from app.notifier.base import Expert, NotifierError, SentMessage
@@ -235,7 +235,7 @@ async def start(world):
     return res
 
 
-async def test_happy_path(world):
+async def test_happy_path(world, monkeypatch):
     res = await start(world)
     assert res == {"expert": "Dima", "escalation_id": "esc_01"}
 
@@ -264,8 +264,11 @@ async def test_happy_path(world):
     assert world["esc"]["esc_01"]["external_msg_id"] == THREAD
     assert "esc_01" in escalation._timeouts
 
+    calls = []
+    monkeypatch.setattr(rag, "backfill_later", lambda: calls.append(1))
     await escalation.on_expert_reply(DM, THREAD, "Thursday", "U_DIMA")
     await settle()
+    assert calls == [1]
 
     assert world["said"] == ["Dima says: Thursday"]
     assert world["chat"] == [("bot_1", "Dima says: Thursday")]
