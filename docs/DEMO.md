@@ -27,6 +27,8 @@
 | 75 | Artem | app → Leave → summary (~5–10 s) → Chat: "What did Dima say about the migration?" | answer + citation (Dima, answered time) |
 | 85 | Artem | app → KB → proposals (if a "change" line was said) | Approve / Reject card |
 
+> Wait until Atlas finishes speaking (orb back to idle) before the next "Atlas, …": a trigger said while it speaks is dropped.
+
 ## Fallbacks
 - "Atlas" not heard → say "Okay Atlas, …" clearly within the first words; backup: `curl -s -X POST "$BASE/debug/ask?meeting_id=<id>&token=$WT" -H 'content-type: application/json' -d '{"text":"what did Artem finish this week?"}'`
 - Dima late or Slack down → `curl -s "$BASE/debug/escalations?meeting_id=<id>&token=$WT"` → `curl -s -X POST "$BASE/debug/expert-reply?token=$WT" -H 'content-type: application/json' -d '{"escalation_id":"<esc>","text":"Thursday"}'`
