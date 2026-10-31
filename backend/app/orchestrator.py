@@ -13,13 +13,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, escalation, hub, llm, runtime, speech
+from app import agent_voice, db, escalation, hub, jira, llm, runtime, speech
 
 log = logging.getLogger(__name__)
 
 FILLER_AFTER_S = 1.5
 CONTEXT_WINDOW_S = 120.0
 MIN_CONFIDENCE = 0.6
+JIRA_LOOKUP_S = 2.5  # overall cap on the in-call ticket lookup (M7.4)
+JIRA_MAX_KEYS = 2
 SEED_DIR = Path(__file__).resolve().parent.parent / "seed"
 
 # Wake word (M6.3): AGENT_NAME ("Atlas") as a whole word within the first WAKE_MAX_WORDS
@@ -98,6 +100,9 @@ needs_expert=true and topic="owner".
 matching expert topic from the list below (or "owner" if none fits).
 - confidence: 0-1, how sure you are the answer is fully supported by the context.
 - topic: "" when needs_expert is false.
+- If a "## Jira" section is in the user message, answer the ticket question from it: \
+status, assignee and due date, briefly. If it says a ticket was not found, say so; that \
+alone is not a reason to set needs_expert.
 
 ## Owner's brief
 {brief}
@@ -171,6 +176,7 @@ def build_messages(
     speaker: str,
     question: str,
     experts: str = "(none)",
+    jira_issues: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
     system = SYSTEM_PROMPT.format(
         agent=runtime.get("AGENT_NAME"),
@@ -181,7 +187,43 @@ def build_messages(
     )
     transcript = "\n".join(f"{u['speaker']}: {u['text']}" for u in recent) or "(empty)"
     user = f"Recent transcript (last 2 minutes):\n{transcript}\n\n{speaker} asks you: {question}"
+    if jira_issues:
+        user += "\n\n## Jira\n" + "\n\n".join(jira_section(i) for i in jira_issues)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def jira_section(issue: dict[str, Any]) -> str:
+    """One ticket for the prompt; {"key", "not_found": True} for a missing one."""
+    if issue.get("not_found"):
+        return f"{issue['key']}: not found in Jira."
+    lines = [
+        f"{issue['key']}: {issue.get('summary') or '(no summary)'}",
+        f"Status: {issue.get('status') or 'unknown'}",
+        f"Assignee: {issue.get('assignee') or 'unassigned'}",
+        f"Due: {issue.get('due') or 'no due date'}",
+    ]
+    if issue.get("description"):
+        lines.append(f"Description: {issue['description']}")
+    return "\n".join(lines)
+
+
+async def jira_context(question: str) -> list[dict[str, Any]]:
+    """Tickets named in the question (max JIRA_MAX_KEYS, fetched concurrently, JIRA_LOOKUP_S
+    overall). [] when Jira isn't configured, no key is found or the lookup fails. Never raises."""
+    if not jira.configured():
+        return []
+    keys = jira.extract_keys(question, jira.project_key())[:JIRA_MAX_KEYS]
+    if not keys:
+        return []
+    try:
+        found = await asyncio.wait_for(
+            asyncio.gather(*(jira.get_issue(k) for k in keys)), JIRA_LOOKUP_S
+        )
+    except Exception as e:
+        log.warning("jira lookup %s failed, answering without it: %r", keys, e)
+        return []
+    log.info("jira lookup %s: %d found", keys, sum(1 for i in found if i))
+    return [i or {"key": k, "not_found": True} for k, i in zip(keys, found, strict=True)]
 
 
 def _normalize(raw: dict[str, Any]) -> dict[str, Any]:
@@ -352,20 +394,27 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
     asked_by = str(utterance.get("speaker") or "Someone")
     call_ts = float(utterance.get("ts") or 0.0)
 
-    brief, recent, experts = await asyncio.gather(
+    context = asyncio.gather(
         _safe(db.get_brief(meeting_id), ""),
         _safe(db.get_recent_utterances(meeting_id, call_ts - CONTEXT_WINDOW_S), []),
         _safe(experts_text(), "(none)"),
+        _safe(jira_context(question), []),  # [] unless Jira is set up and a key was said
     )
-    messages = build_messages(brief, recent, asked_by, question, experts)
-    task = asyncio.create_task(llm.chat_json(messages, "agent_answer", ANSWER_SCHEMA))
-
     filler = False
-    wait_s = max(0.0, FILLER_AFTER_S - (time.monotonic() - t0))
-    done, _ = await asyncio.wait({task}, timeout=wait_s)
-    if not done:
+    done, _ = await asyncio.wait({context}, timeout=FILLER_AFTER_S)
+    if not done:  # slow context (a Jira lookup): the filler covers it
         filler = True
         await speech.say_filler(meeting_id)
+    brief, recent, experts, issues = await context
+    messages = build_messages(brief, recent, asked_by, question, experts, issues)
+    task = asyncio.create_task(llm.chat_json(messages, "agent_answer", ANSWER_SCHEMA))
+
+    if not filler:
+        wait_s = max(0.0, FILLER_AFTER_S - (time.monotonic() - t0))
+        done, _ = await asyncio.wait({task}, timeout=wait_s)
+        if not done:
+            filler = True
+            await speech.say_filler(meeting_id)
     try:
         result = _normalize(await task)
     except Exception as e:

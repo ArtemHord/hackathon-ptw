@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app import db, recall
+from app import db, jira, recall
 from app.config import get_settings
 
 log = logging.getLogger(__name__)
@@ -177,6 +177,24 @@ async def ask_agent(meeting_id: str, body: AskBody | None = None) -> dict[str, A
     return {"id": meeting_id, "accepted": True, "question": question}
 
 
+@router.post("/meetings/{meeting_id}/action-items/{item_id}/jira")
+async def action_item_to_jira(meeting_id: str, item_id: str) -> dict[str, Any]:
+    """M7.4: create a Jira issue for one action item (idempotent: an existing key is
+    returned as is). 409 not_configured when Jira isn't set up, 502 on a Jira error."""
+    if await db.get_meeting(meeting_id) is None:
+        raise ApiError(404, "not_found", f"Meeting {meeting_id} not found")
+    if not jira.configured() or not jira.project_key():
+        raise ApiError(409, "not_configured", "Jira is not configured (Integrations → Jira)")
+    try:
+        issue = await jira.issue_for_item(meeting_id, item_id)
+    except jira.JiraError as e:
+        log.warning("Jira create failed for %s/%s: %s", meeting_id, item_id, e)
+        raise ApiError(502, "upstream_error", str(e)) from e
+    if issue is None:
+        raise ApiError(404, "not_found", f"Action item {item_id} not found")
+    return {"jira_key": issue["key"], "url": issue["url"]}
+
+
 # --- read endpoints (screens 1, 3-fallback, 4) -----------------------------------
 
 
@@ -249,13 +267,14 @@ async def get_meeting_detail(meeting_id: str, since: int | None = Query(default=
         "decisions": [str(x) for x in _json_list(m.get("decisions"))],
         "action_items": [
             {
-                "id": str(a.get("id") or f"ai_{i + 1:02d}"),
+                "id": a["id"],
                 "owner": a.get("owner"),
                 "text": a.get("text") or "",
                 "due": a.get("due"),
+                "jira_key": a.get("jira_key"),
+                "jira_url": a.get("jira_url"),
             }
-            for i, a in enumerate(_json_list(m.get("action_items")))
-            if isinstance(a, dict)
+            for a in db.with_item_ids(m.get("action_items"))
         ],
         "fact_checks": [
             {

@@ -30,6 +30,11 @@ Lista rozmów właściciela, najnowsze pierwsze. Response `200`: `{items: [{id, 
 ### GET /meetings/{id}?since=<ts>
 Szczegóły rozmowy. Bez `since`: pełny obiekt. Z `since` (sekundy od początku rozmowy, integer): tablice `utterances`, `fact_checks`, `escalations`, `agent_said` zawierają tylko elementy z `ts > since`, z wyjątkiem eskalacji, które zmieniły status od tego czasu (zwracane w całości, klucz `id`); pola skalarne (`status`, `summary`...) zawsze aktualne. Służy do odpytywania co 2 s, gdy WS nie działa. Pola `summary`, `decisions`, `action_items` są puste (`""`, `[]`) do końca podsumowania. Mock: `mocks/meeting_detail.json`.
 
+Element `action_items`: `{id, owner, text, due, jira_key, jira_url}`; `jira_key`/`jira_url` = null, dopóki nie ma zgłoszenia w Jirze. `id` jest stabilne (zapisane albo `ai_NN` wg pozycji). (Dodane M7, zmiana kontraktu.)
+
+### POST /meetings/{id}/action-items/{item_id}/jira
+Tworzy zgłoszenie w Jirze (projekt `JIRA_PROJECT_KEY`, typ Task, opis ADF) dla jednego action itemu i zapisuje klucz na itemie. Idempotentne: jeśli item ma już `jira_key`, zwraca istniejący. Request: puste ciało. Response `200`: `{jira_key: "PTW-42", url: "https://<site>.atlassian.net/browse/PTW-42"}`. Błędy: `404` nieznana rozmowa / item, `409` `not_configured` (Jira nieustawiona), `502` `upstream_error` (komunikat z Jiry). (Dodane M7, zmiana kontraktu.)
+
 ### POST /meetings/{id}/leave
 Bot wychodzi z rozmowy, backend uruchamia podsumowanie (asynchronicznie). Request: puste ciało. Response `200`: `{id, status: "done", summary_status: "processing"}`. Mock: `mocks/meeting_leave.json`.
 
@@ -96,6 +101,7 @@ Karta eskalacji: `escalation_created` dodaje kartę o `id` (waiting), `escalatio
 | 3 | Live (Ask agent) | `POST /meetings/{id}/ask` | `meeting_ask.json` |
 | 3 | Live (fallback bez WS) | `GET /meetings/{id}?since=` | `meeting_detail.json` |
 | 4 | Szczegóły rozmowy | `GET /meetings/{id}` | `meeting_detail.json` |
+| 4 | Szczegóły rozmowy (Create in Jira) | `POST /meetings/{id}/action-items/{item_id}/jira` | brak (`{jira_key, url}`) |
 | 5 | Czat z agentem | `POST /chat` | `chat.json` |
 | 5 | Czat (Odsłuchaj) | `POST /tts` | brak (audio/mpeg) |
 | 6 | Baza wiedzy | `GET /kb/docs`, `POST /kb/docs` | `kb_docs.json`, `kb_doc_create.json` |

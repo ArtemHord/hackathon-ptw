@@ -394,6 +394,51 @@ async def append_action_item(meeting_id: str, item: dict[str, Any]) -> None:
     )
 
 
+def item_id(item: dict[str, Any], index: int) -> str:
+    """Action item id: the stored `id`, else ai_NN by position (what GET /meetings/{id}
+    has always exposed, so ids the app already holds stay valid)."""
+    return str(item.get("id") or f"ai_{index + 1:02d}")
+
+
+def with_item_ids(items: Any) -> list[dict[str, Any]]:
+    """Action items (dicts only) with `id` filled in. Accepts a list or a JSON string."""
+    if isinstance(items, str):
+        try:
+            items = json.loads(items)
+        except ValueError:
+            return []
+    if not isinstance(items, list):
+        return []
+    return [{**a, "id": item_id(a, i)} for i, a in enumerate(items) if isinstance(a, dict)]
+
+
+async def set_action_item_jira(
+    meeting_id: str, item_id_: str, jira_key: str, jira_url: str
+) -> dict[str, Any] | None:
+    """Store jira_key/jira_url on one action item (row lock, read-modify-write) and persist
+    every item's id. An item that already has a key keeps it. Returns the item or None."""
+    pool = await get_pool()
+    async with pool.acquire() as conn, conn.transaction():
+        raw = await conn.fetchval(
+            "select action_items from meetings where id = $1 for update", meeting_id
+        )
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        items = [
+            {**a, "id": item_id(a, i)} if isinstance(a, dict) else a
+            for i, a in enumerate(raw if isinstance(raw, list) else [])
+        ]
+        hit = next((a for a in items if isinstance(a, dict) and a["id"] == item_id_), None)
+        if hit is None:
+            return None
+        if not hit.get("jira_key"):
+            hit.update(jira_key=jira_key, jira_url=jira_url)
+        await conn.execute(
+            "update meetings set action_items = $2::jsonb where id = $1", meeting_id, items
+        )
+        return dict(hit)
+
+
 # --- facts -------------------------------------------------------------------
 
 
