@@ -126,6 +126,14 @@ async def get_meeting(meeting_id: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+async def get_meeting_by_bot(bot_id: str) -> dict[str, Any] | None:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"select {MEETING_COLUMNS} from meetings where recall_bot_id = $1", bot_id
+    )
+    return dict(row) if row else None
+
+
 async def update_meeting(meeting_id: str, **fields: Any) -> dict[str, Any] | None:
     bad = set(fields) - MEETING_UPDATABLE
     if bad:

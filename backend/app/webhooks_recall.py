@@ -9,6 +9,7 @@ Payload (docs.recall.ai/docs/real-time-event-payloads):
 import asyncio
 import logging
 import secrets
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -100,4 +101,71 @@ async def recall_transcript(request: Request, meeting_id: str = "", token: str =
         return JSONResponse({"ok": True})
     if meeting_id and isinstance(payload, dict):
         _spawn(process_transcript(meeting_id, payload))
+    return JSONResponse({"ok": True})
+
+
+STATUS_MAP = {
+    "bot.joining_call": "joining",
+    "bot.in_waiting_room": "joining",
+    "bot.in_call_not_recording": "in_call",
+    "bot.in_call_recording": "in_call",
+    "bot.done": "done",
+    "bot.fatal": "failed",
+}
+FINAL = ("done", "failed")
+
+
+async def postcall_hook(meeting_id: str) -> None:
+    """Called once when the bot is done. No-op until M4.2."""
+    return None  # TODO M4.2
+
+
+async def process_status(payload: dict[str, Any]) -> None:
+    try:
+        event = payload.get("event")
+        if event != "bot.call_ended" and event not in STATUS_MAP:
+            return
+        bot_id = (((payload.get("data") or {}).get("bot")) or {}).get("id")
+        meeting = await db.get_meeting_by_bot(bot_id) if bot_id else None
+        if meeting is None:
+            log.info("status webhook: unknown bot %s, ignored", bot_id)
+            return
+        mid, current = meeting["id"], meeting["status"]
+        now = datetime.now(UTC)
+        fields: dict[str, Any] = {}
+        if event == "bot.call_ended":
+            if meeting.get("ended_at") is None:
+                fields["ended_at"] = now
+            new = current
+        else:
+            new = STATUS_MAP[event]
+            if current in FINAL and new != current:
+                return  # never leave a final state (late or out-of-order retry)
+            if new == "in_call" and meeting.get("started_at") is None:
+                fields["started_at"] = now
+            if new in FINAL and meeting.get("ended_at") is None:
+                fields["ended_at"] = now
+        changed = new != current
+        if changed:
+            fields["status"] = new
+        if fields:
+            await db.update_meeting(mid, **fields)
+        if changed:
+            await hub.publish(mid, "meeting_status", {"status": new})
+            if new == "done":
+                await postcall_hook(mid)
+    except Exception:
+        log.exception("status processing failed")
+
+
+@router.post("/webhooks/recall/status")
+async def recall_status(request: Request, token: str = ""):
+    if not _token_ok(token):
+        return error_response(401, "unauthorized", "Missing or invalid token")
+    try:
+        payload = await request.json()
+    except ValueError:
+        return JSONResponse({"ok": True})
+    if isinstance(payload, dict):
+        _spawn(process_status(payload))
     return JSONResponse({"ok": True})
