@@ -1,4 +1,5 @@
 import json
+from datetime import UTC
 from pathlib import Path
 
 import httpx
@@ -161,3 +162,27 @@ def test_fact_ts_falls_back_to_answered_escalation(monkeypatch):
     respx.post(CHAT).mock(return_value=_llm({"answer": "Thursday.", "used": [3]}))
     r = TestClient(app).post("/chat", json={"question": "q"}, headers=AUTH)
     assert r.json()["citations"][0]["ts"] == 355
+
+
+def test_recent_calls_block_in_prompt(monkeypatch, env):
+    from datetime import datetime
+
+    async def lm(n):
+        return [
+            {
+                "title": "Sync",
+                "status": "ended",
+                "started_at": datetime(2026, 10, 30, 12, 0, tzinfo=UTC),
+                "ended_at": datetime(2026, 10, 30, 12, 30, tzinfo=UTC),
+            }
+        ]
+
+    monkeypatch.setattr(db, "list_meetings", lm)
+    block = __import__("asyncio").run(chat._recent_calls())
+    assert "Sync | 2026-10-30 13:00 (Europe/Warsaw), 30 min | ended" in block
+
+    async def boom(n):
+        raise RuntimeError
+
+    monkeypatch.setattr(db, "list_meetings", boom)
+    assert __import__("asyncio").run(chat._recent_calls()) == ""
