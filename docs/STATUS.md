@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M0
-- In progress: M0.3 migrations (developer)
+- In progress: M0 verifier run
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -15,7 +15,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M0.1 Backend skeleton: uv, FastAPI, `/health`, config (all SPEC env vars), ruff, pytest, root `.env.example`
 - [x] M0.2 API contract: `docs/API.pl.md` + `mocks/*.json` incl. `/app/ws` events (Misha blocked on it)
 - [x] M0.4 `backend/Dockerfile` (uvicorn on `0.0.0.0:${PORT:-8000}`), Railway root `backend/`, healthcheck `/health`
-- [ ] M0.3 Migrations `001_init.sql` (all tables + `vector`) + `scripts/migrate.py` (idempotent; Supabase Session pooler 5432)
+- [x] M0.3 Migrations `001_init.sql` (all tables + `vector`) + `scripts/migrate.py` (idempotent; Supabase Session pooler 5432)
 
 ### M1 · Agent in the call (target 04:30)
 - [ ] M1.1 Recall client, `POST /meetings`, `POST /meetings/{id}/leave`; bot joins Google Meet
@@ -52,15 +52,22 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 ## Research
 - [x] R1 SPEC "Do weryfikacji" blocking M1–M3 → `docs/decisions.md` (Recall output_media+recording_config, meeting chat endpoint, bot status events; Slack url_verification + signature)
 
+## Essentials (survive compaction)
+- Contract FROZEN after M0: `docs/API.pl.md` + `mocks/` (17). Changes = Artem gate. One escalation shape {id, expert, channel, question, asked_by, ts, status waiting|answered|timeout, answer, answered_ts}; timeout = `escalation_answered` with status timeout. WS envelope {type, meeting_id, ts ISO, data}; data.ts = seconds from call start. 7 WS events incl. `meeting_status`.
+- DB: `001_init.sql`, text ids (uuid), `utterances` dedup → `INSERT … ON CONFLICT (meeting_id, speaker, ts_start) DO NOTHING`; Slack reply lookup `escalations.external_msg_id`. `agent_said` table for poll mode.
+- Recall/Slack facts: `docs/decisions.md` #13–20 (one bot create with output_media + recording_config, `recallai_streaming` prioritize_low_latency; status via dashboard webhook, post-call on `bot.done`; Slack v0 HMAC, ignore bot_id/bot_message, dedupe event_id).
+- Run: `cd backend && uv run pytest -q`; Docker CMD uvicorn on `${PORT:-8000}`; agent-page/ outside build context → serve from backend/ (M2.1).
+
 ## Human tasks (Artem, in parallel — we build on respx mocks, ask only for live checks)
 - [ ] Supabase project (EU) + enable `vector` → `DATABASE_URL` (Session pooler, 5432)
 - [ ] Railway project (EU), auto-deploy from main, root `backend/` → domain = `PUBLIC_BASE_URL`
 - [ ] Recall.ai API key (eu-central-1)
 - [ ] Slack app (SPEC "Konfiguracja Slack app"); Request URL after M3.2 is deployed
 - [ ] ElevenLabs voice id + OpenAI key
-- Live checks pending: Railway public `/health` (deploy from main, root `backend/`)
+- Live checks pending: Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:08 · M0.3 · schema 13 tables + agent_said, migrate ×2 on docker pgvector ok, pytest 6 · a654c75
 - 03:06 · M0.4 · docker build+run PORT=9000 → /health ok, image 482MB · 1b26525
 - 03:05 · M0.2 · contract + 17 mocks (7 WS events incl. meeting_status; one escalation shape; agent_said[] for poll) · 1 review round · 7fe5206
 - 03:02 · M0.1 · skeleton green (pytest 2, ruff clean, /health ok); embed-model default kept (SPEC Decyzje fixes 3-small/1536) · ed1d5d9
