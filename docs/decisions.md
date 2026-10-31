@@ -4,6 +4,7 @@ Agents and `@codex review` check PRs against this file.
 
 | # | Decision | Why |
 |---|----------|-----|
+| 21 | Recall auth header `Authorization: Token <RECALL_API_KEY>` (prefix optional); DB `meetings.mode` stores API enum `notetaker|delegate` (no CHECK; column default `notes` is cosmetic) | https://docs.recall.ai/docs/authentication |
 | 20 | Slack: ignore events with `bot_id`, `subtype=bot_message` or `user` == our bot user (`auth.test`); dedupe by `event_id`, skip if `X-Slack-Retry-Num` present (bot_id field UNCONFIRMED in fetched page) | https://docs.slack.dev/reference/events/message · https://docs.slack.dev/apis/events-api/ |
 | 19 | Slack signature: `v0=` + hex HMAC-SHA256(signing_secret, `v0:{X-Slack-Request-Timestamp}:{raw body}`) vs `X-Slack-Signature`, `hmac.compare_digest`, reject if ts >5 min off; `url_verification` → 200 `{"challenge": ...}`; answer <3 s | https://docs.slack.dev/authentication/verifying-requests-from-slack · https://docs.slack.dev/reference/events/url_verification |
 | 18 | Recall leave: `POST /api/v1/bot/{id}/leave_call/` | https://docs.recall.ai/reference/bot_leave_call_create |

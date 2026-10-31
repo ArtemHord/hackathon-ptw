@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="Call Crew")
+from app import db, meetings
+
+app = FastAPI(title="Call Crew", lifespan=db.lifespan)
+meetings.install_error_handlers(app)
+app.include_router(meetings.router)
 
 
 @app.get("/health")
