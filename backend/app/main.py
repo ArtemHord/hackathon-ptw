@@ -19,6 +19,7 @@ from app import (
     settings_api,
     speech,
     tts,
+    web_ui,
     webhooks_recall,
     webhooks_slack,
 )
@@ -61,6 +62,7 @@ app.include_router(agent_voice.router)
 app.include_router(speech.router)
 app.include_router(settings_api.router)
 app.include_router(debug.router)  # HACK: offline escalation driver
+web_ui.install(app)  # /ui (built React app) + / -> /ui
 
 
 @app.get("/health")
