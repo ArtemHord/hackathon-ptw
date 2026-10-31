@@ -12,11 +12,12 @@ import asyncio
 import json
 import logging
 import re
+import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, hub, recall, runtime, speech
+from app import agent_voice, db, hub, jira, recall, runtime, speech
 from app.config import get_settings
 from app.notifier.base import Expert, SentMessage, get_notifier
 
@@ -252,10 +253,17 @@ async def _timeout(meeting_id: str, esc_id: str, expert: str, question: str) -> 
             ts = float(row.get("ts") or 0) + _elapsed_s(row.get("asked_at"))
             line = f"{name} hasn't answered yet — I've added it to follow-ups."
             await _speak(meeting_id, line, esc_id, ts, False, None)
-        await _try(
-            db.append_action_item(meeting_id, {"owner": name, "text": question, "due": None}),
-            "append action item",
-        )
+        item: dict[str, Any] = {"owner": name, "text": question, "due": None}
+        follow_up = jira.configured() and bool(jira.project_key())
+        if follow_up:
+            item = {"id": f"ai_{secrets.token_hex(4)}", **item}
+        await _try(db.append_action_item(meeting_id, item), "append action item")
+        if follow_up:  # M7.4: Jira follow-up in the background, the spoken line is already out
+            jira.spawn(
+                jira.followup_for_timeout(
+                    meeting_id, item["id"], question, str(row.get("asked_by") or "someone"), name
+                )
+            )
         await _try(
             hub.publish(meeting_id, "escalation_answered", public(row, name)), "publish timeout"
         )
