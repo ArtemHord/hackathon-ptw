@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { api, type Mode } from "@/lib/api"
+import { prefs } from "@/lib/prefs"
 
 function NewMeeting({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate()
@@ -24,7 +25,7 @@ function NewMeeting({ open, onClose }: { open: boolean; onClose: () => void }) {
         meeting_url: url.trim(), mode, title: title.trim() || undefined,
         brief: mode === "delegate" && brief.trim() ? brief.trim() : undefined,
       }),
-    onSuccess: (m) => { qc.invalidateQueries({ queryKey: ["meetings"] }); onClose(); nav(`/meetings/${m.id}`) },
+    onSuccess: (m) => { qc.invalidateQueries({ queryKey: ["meetings"] }); onClose(); nav(`/test/calls/${m.id}`) },
   })
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -67,13 +68,25 @@ export default function Meetings() {
   const nav = useNavigate()
   const [open, setOpen] = useState(false)
   const { data, isLoading } = useQuery({ queryKey: ["meetings"], queryFn: api.meetings, refetchInterval: 5000 })
-  const sim = useMutation({ mutationFn: api.simulate, onSuccess: (r) => nav(`/meetings/${r.meeting_id}`) })
+  // speed 20 runs the stand-up in seconds, 2 is slow enough to watch; an empty reply leaves the expert question open
+  const [speed, setSpeed] = useState(20)
+  const [reply, setReply] = useState("")
+  const sim = useMutation({
+    mutationFn: () => api.simulate({ speed, expert_reply: reply.trim() || null }),
+    onSuccess: (r) => { prefs.addDemoCall(r.meeting_id); nav(`/test/calls/${r.meeting_id}`) },
+  })
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Meetings</h1>
-        <div className="flex gap-2">
+        <h1 className="text-2xl font-semibold">Calls</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label="Simulation speed" className="h-8 rounded-lg border bg-transparent px-2 text-sm" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+            <option value={2}>speed 2 (watchable)</option>
+            <option value={20}>speed 20 (fast)</option>
+            <option value={200}>speed 200 (instant)</option>
+          </select>
+          <Input className="h-8 w-48" placeholder="Expert reply (empty = by hand)" value={reply} onChange={(e) => setReply(e.target.value)} />
           <Button variant="outline" disabled={sim.isPending} onClick={() => sim.mutate()}>Simulate call</Button>
           <Button onClick={() => setOpen(true)}>New meeting</Button>
         </div>
@@ -90,13 +103,13 @@ export default function Meetings() {
             {data?.items.map((m) => (
               <TableRow key={m.id}>
                 <TableCell>
-                  <Link className="font-medium underline-offset-4 hover:underline" to={`/meetings/${m.id}`}>{m.title || m.id}</Link>
+                  <Link className="font-medium underline-offset-4 hover:underline" to={`/test/calls/${m.id}`}>{m.title || m.id}</Link>
                   {m.live && <Badge className="ml-2 bg-red-600 text-white">LIVE</Badge>}
                 </TableCell>
                 <TableCell>{m.platform}</TableCell>
                 <TableCell><Badge variant="outline">{m.mode}</Badge></TableCell>
                 <TableCell>{m.status}</TableCell>
-                <TableCell>{new Date(m.started_at).toLocaleString()}</TableCell>
+                <TableCell>{m.started_at ? new Date(m.started_at).toLocaleString() : "-"}</TableCell>
                 <TableCell>{m.duration_min === null ? "-" : `${m.duration_min} min`}</TableCell>
               </TableRow>
             ))}

@@ -5,11 +5,11 @@ export type Mode = "notetaker" | "delegate"
 export interface MeetingRow {
   id: string
   title: string | null
-  platform: string
+  platform: string | null
   mode: Mode
   status: string
   live: boolean
-  started_at: string
+  started_at: string | null
   duration_min: number | null
 }
 export interface Utterance { id: string; speaker: string; text: string; ts: number }
@@ -68,6 +68,12 @@ export const clearToken = () => localStorage.removeItem(KEY)
 
 let onUnauthorized: () => void = () => {}
 export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn }
+/** The WebSocket was refused (close code 4401): same as a 401 */
+export const tokenRejected = () => { clearToken(); onUnauthorized() }
+
+/** How failed requests are shown: the testing tools show the raw code, the client app plain words */
+let presentError: (code: string, message: string) => void = (code, message) => { toast.error(`${code}: ${message}`) }
+export const setErrorPresenter = (fn: (code: string, message: string) => void) => { presentError = fn }
 
 export class ApiError extends Error {
   status: number
@@ -91,19 +97,19 @@ async function raise(res: Response, quiet: boolean): Promise<never> {
     clearToken()
     onUnauthorized()
   } else if (!quiet) {
-    toast.error(`${code}: ${message}`)
+    presentError(code, message)
   }
   throw new ApiError(res.status, code, message)
 }
 
-interface Opts { method?: string; json?: unknown; form?: FormData; quiet?: boolean }
+interface Opts { method?: string; json?: unknown; form?: FormData; quiet?: boolean; signal?: AbortSignal }
 
 async function raw(path: string, o: Opts = {}): Promise<Response> {
   const headers: Record<string, string> = { Authorization: `Bearer ${getToken()}` }
   let body: BodyInit | undefined
   if (o.form) body = o.form
   else if (o.json !== undefined) { headers["Content-Type"] = "application/json"; body = JSON.stringify(o.json) }
-  const res = await fetch(path, { method: o.method ?? (body ? "POST" : "GET"), headers, body })
+  const res = await fetch(path, { method: o.method ?? (body ? "POST" : "GET"), headers, body, signal: o.signal })
   if (!res.ok) await raise(res, o.quiet ?? false)
   return res
 }
@@ -127,13 +133,16 @@ export const api = {
     req<MeetingDetail>(`/meetings/${id}${since !== undefined ? `?since=${since}` : ""}`, { quiet: since !== undefined }),
   leave: (id: string) => req<{ id: string }>(`/meetings/${id}/leave`, { method: "POST" }),
   ask: (id: string, text?: string) => req<{ question: string }>(`/meetings/${id}/ask`, { json: text ? { text } : {} }),
-  simulate: () => req<{ meeting_id: string }>("/debug/simulate", { json: { speed: 20, expert_reply: null } }),
+  /** `expert_reply: null` keeps the expert question open so it can be answered by hand */
+  simulate: (b: { speed: number; expert_reply: string | null } = { speed: 20, expert_reply: null }) =>
+    req<{ meeting_id: string }>("/debug/simulate", { json: b }),
   expertReply: (escalation_id: string, text: string) =>
     req<unknown>("/debug/expert-reply", { json: { escalation_id, text } }),
   createJira: (mid: string, itemId: string) =>
     req<{ jira_key: string; url: string }>(`/meetings/${mid}/action-items/${itemId}/jira`, { method: "POST" }),
-  chat: (question: string) => req<{ answer: string; citations: Citation[] }>("/chat", { json: { question } }),
-  tts: async (text: string) => (await raw("/tts", { json: { text } })).blob(),
+  chat: (question: string, signal?: AbortSignal, quiet = false) =>
+    req<{ answer: string; citations: Citation[] }>("/chat", { json: { question }, signal, quiet }),
+  tts: async (text: string, quiet = false) => (await raw("/tts", { json: { text }, quiet })).blob(),
   kbDocs: () => req<{ items: KbDoc[] }>("/kb/docs"),
   uploadDoc: (file: File, title?: string) => {
     const f = new FormData()
