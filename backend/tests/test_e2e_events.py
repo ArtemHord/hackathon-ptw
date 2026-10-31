@@ -61,7 +61,7 @@ def _chat_handler(request: httpx.Request) -> httpx.Response:
     body = json.loads(request.content)
     kind = body["response_format"]["json_schema"]["name"]
     prompt = body["messages"][-1]["content"]
-    if kind == "crew_answer":
+    if kind == "agent_answer":
         if "Postgres 17" in prompt:
             out = _answer("", True, "postgres")
         elif "auth tokens" in prompt:
@@ -204,7 +204,7 @@ def test_all_seven_ws_events_end_to_end(world):
                 assert c.post(tr, json=_transcript(line)).status_code == 200
                 n = i + 1
                 feed.until(lambda ev, n=n: feed.count("utterance") >= n, f"utterance {n}")
-                if line["text"].startswith("Crew"):
+                if line["text"].startswith("Atlas"):
                     said = feed.count("agent_said") + 1
                     feed.until(lambda ev, s=said: feed.count("agent_said") >= s, "agent_said")
                 if "Postgres 17" in line["text"]:

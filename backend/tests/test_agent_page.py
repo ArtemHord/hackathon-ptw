@@ -33,6 +33,7 @@ def test_agent_page_served():
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
     assert "Call Crew" in r.text
+    assert ">Atlas<" in r.text
     assert "/agent-page/ws" in r.text
 
 

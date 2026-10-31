@@ -1,9 +1,9 @@
 [
   {"speaker": "Misha", "text": "Morning everyone, thanks for joining the stand-up.", "at_s": 12},
-  {"speaker": "Julian", "text": "Morning! Artem is out today, so Crew is covering for him.", "at_s": 17},
-  {"speaker": "Misha", "text": "Crew, what did Artem finish this week?", "at_s": 22},
-  {"speaker": "Misha", "text": "Crew, when do we migrate to Postgres 17?", "at_s": 40},
+  {"speaker": "Julian", "text": "Morning! Artem is out today, so his AI delegate Atlas covers for him.", "at_s": 17},
+  {"speaker": "Misha", "text": "Atlas, what did Artem finish this week?", "at_s": 22},
+  {"speaker": "Misha", "text": "Atlas, when do we migrate to Postgres 17?", "at_s": 40},
   {"speaker": "Misha", "text": "Our API limit is 100 requests per second.", "at_s": 62},
   {"speaker": "Julian", "text": "Okay, I will take a look at the dashboard after this call.", "at_s": 68},
-  {"speaker": "Misha", "text": "Crew, can we cache auth tokens?", "at_s": 78}
+  {"speaker": "Misha", "text": "Atlas, can we cache auth tokens?", "at_s": 78}
 ]

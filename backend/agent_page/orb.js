@@ -1,4 +1,4 @@
-// Call Crew agent orb: the bot's camera tile (M2.5a).
+// Atlas agent orb (product: Call Crew): the bot's camera tile (M2.5a).
 // Port of docs/design/agent-clips/orb-reference.jsx (shapeD, Orb, params, describe, AskText) to one
 // <canvas> at 1280x720, vanilla JS, no build. The design's timeline is replaced by a live state machine:
 // idle / listen / think / speak, each looping on its own period; a state change blends from the current

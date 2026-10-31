@@ -110,7 +110,7 @@ def test_create_meeting_sends_bot(client, store):
     endpoint["url"] = "<transcript>"
     assert sent == {
         "meeting_url": "https://meet.google.com/abc-defg-hij",
-        "bot_name": "Call Crew (AI) for Artem",
+        "bot_name": "Atlas (AI) for Artem",
         "output_media": {"camera": {"kind": "webpage", "config": {"url": "<agent>"}}},
         "variant": {
             "google_meet": "web_4_core",

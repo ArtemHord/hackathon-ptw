@@ -10,7 +10,7 @@ from app.config import get_settings
 
 log = logging.getLogger(__name__)
 
-BOT_NAME = "Call Crew (AI) for Artem"
+BOT_NAME = f"{get_settings().AGENT_NAME} (AI) for Artem"  # HACK: owner name
 WAITING_ROOM_TIMEOUT_S = 600
 TIMEOUT = httpx.Timeout(20.0)
 

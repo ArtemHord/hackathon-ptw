@@ -21,7 +21,9 @@ from app.meetings import error_response
 
 log = logging.getLogger(__name__)
 
-BOT_MARKER = "call crew"  # our bot joins as "Call Crew (AI) for ..." (recall.BOT_NAME)
+# Our bot joins as "<AGENT_NAME> (AI) for Artem" (recall.BOT_NAME); "call crew" = legacy name.
+BOT_MARKER = f"{get_settings().AGENT_NAME} (AI)".lower()
+BOT_MARKERS = (BOT_MARKER, "call crew")
 
 router = APIRouter()
 
@@ -36,13 +38,19 @@ def _spawn(coro) -> asyncio.Task:
     return task
 
 
+def is_bot_speaker(name: str | None) -> bool:
+    """True for our own bot's voice (SPEC "Ryzyka": agent reacting to itself)."""
+    low = (name or "").lower()
+    return any(marker in low for marker in BOT_MARKERS)
+
+
 def _token_ok(token: str | None) -> bool:
     expected = get_settings().WEBHOOK_TOKEN
     return bool(expected) and secrets.compare_digest((token or "").encode(), expected.encode())
 
 
 async def orchestrator_hook(meeting_id: str, utterance: dict[str, Any]) -> None:
-    """Called after every new utterance: the "Crew, ..." trigger (never raises)."""
+    """Called after every new utterance: the "Atlas, ..." trigger (never raises)."""
     from app import orchestrator  # lazy: orchestrator -> speech -> this module
 
     await orchestrator.handle(meeting_id, utterance)
@@ -67,8 +75,8 @@ def parse_transcript(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
     participant = inner.get("participant") or {}
     name = (participant.get("name") or "").strip()
-    if BOT_MARKER in name.lower():
-        return None  # our own voice (SPEC "Ryzyka": agent reacting to itself)
+    if is_bot_speaker(name):
+        return None  # our own voice
     speaker = name or f"Participant {participant.get('id', '?')}"
     start = (words[0].get("start_timestamp") or {}).get("relative")
     end = (words[-1].get("end_timestamp") or {}).get("relative")

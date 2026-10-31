@@ -1,8 +1,8 @@
-"""The "Crew, ..." trigger (SPEC "Głos: ElevenLabs w rozmowie", steps 2-6).
+"""The "Atlas, ..." trigger (SPEC "Głos: ElevenLabs w rozmowie", steps 2-6).
 
-utterance -> alias at the start? -> delegate mode, not speaking, not busy -> context
-(last 120 s, brief, seed docs, experts) -> LLM JSON {answer, confidence, needs_expert,
-topic} -> filler if slow -> say() -> agent_said row + WS event.
+utterance -> wake word in the first 6 words + 2-word question? -> delegate mode, not
+speaking, not busy -> context (last 120 s, brief, seed docs, experts) -> LLM JSON {answer,
+confidence, needs_expert, topic} -> filler if slow -> say() -> agent_said row + WS event.
 """
 
 import asyncio
@@ -10,10 +10,12 @@ import json
 import logging
 import re
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from app import agent_voice, db, escalation, hub, llm, speech
+from app.config import get_settings
 
 log = logging.getLogger(__name__)
 
@@ -22,9 +24,35 @@ CONTEXT_WINDOW_S = 120.0
 MIN_CONFIDENCE = 0.6
 SEED_DIR = Path(__file__).resolve().parent.parent / "seed"
 
-# Longest first so "call crew" wins over "crew", "crue" over "cru".
-_ALIAS = r"(?:call[\s,]+crew|hey[\s,]+crew|crew|crue|cru|kru)"
-_TRIGGER = re.compile(rf"^[\W_]*{_ALIAS}(?![\w'])[\W_]*(.*)$", re.IGNORECASE | re.DOTALL)
+# Wake word (M6.3): AGENT_NAME ("Atlas") as a whole word within the first WAKE_MAX_WORDS
+# words (Recall merges sentences: "blah. Atlas, what..."), then at least 2 words of question.
+WAKE_MAX_WORDS = 6
+MIN_QUESTION_WORDS = 2
+# HACK: ASR spellings of "Atlas" heard in tests; extras for other names go here.
+_ALIAS_EXTRA = {"atlas": ("atlass", "atlis")}
+_SEGMENT_START_ALIAS = {"atlas": ("at last",)}  # too common mid-sentence: only as first words
+_WORD = re.compile(r"[a-z0-9]+(?:'[a-z]+)?", re.IGNORECASE)
+
+
+def wake_aliases(name: str | None = None) -> tuple[str, ...]:
+    """Every alias, the one place they are built: name, hey/okay/ok name, ASR spellings."""
+    n = (name or get_settings().AGENT_NAME).strip().lower()
+    return (f"hey {n}", f"okay {n}", f"ok {n}", n, *_ALIAS_EXTRA.get(n, ()))
+
+
+@lru_cache
+def _wake_res(name: str) -> tuple[re.Pattern[str], re.Pattern[str] | None]:
+    def alt(aliases) -> str:
+        parts = sorted(aliases, key=len, reverse=True)  # "hey atlas" wins over "atlas"
+        return "|".join(r"[\s,]+".join(map(re.escape, a.split())) for a in parts)
+
+    anywhere = re.compile(rf"(?<![\w'])(?:{alt(wake_aliases(name))})(?![\w'])", re.IGNORECASE)
+    start_only = _SEGMENT_START_ALIAS.get(name.strip().lower())
+    start = (
+        re.compile(rf"^[\W_]*(?:{alt(start_only)})(?![\w'])", re.IGNORECASE) if start_only else None
+    )
+    return anywhere, start
+
 
 ANSWER_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -38,10 +66,14 @@ ANSWER_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = """You are Crew, an AI delegate attending this meeting for its owner.
-People in the call address you as "Crew". Your words are spoken aloud in the call.
+# HACK: owner name "Artem" hardcoded for the demo.
+SYSTEM_PROMPT = """You are {agent}, Artem's delegate in this call.
+People in the call address you as "{agent}". Your words are spoken aloud in the call.
 
 Rules:
+- The question comes from noisy live speech recognition: interpret it charitably using the \
+brief and the documents ("what the tartan finish" = "what did Artem finish"). If it is \
+still unclear what was asked, reply with ONE short clarifying question.
 - Answer ONLY from the context below: the owner's brief, the company documents and the \
 recent transcript. Never guess or invent facts.
 - At most 2 short spoken sentences, in English. No markdown, no lists.
@@ -76,13 +108,27 @@ async def on_needs_expert(
     return await escalation.start(meeting_id, question, topic, asked_by)
 
 
+def match_trigger(text: str) -> tuple[str | None, str]:
+    """(question, reason). Question is the text after the wake word, or None + why not."""
+    text = (text or "").replace("\u2019", "'")
+    anywhere, start = _wake_res(get_settings().AGENT_NAME.strip().lower())
+    m = start.match(text) if start else None
+    if m is None:
+        m = anywhere.search(text)
+        if m is None:
+            return None, "no wake word"
+        before = len(_WORD.findall(text[: m.start()]))
+        if before >= WAKE_MAX_WORDS:
+            return None, f"wake word is word {before + 1}, after the first {WAKE_MAX_WORDS}"
+    question = re.sub(r"^[\W_]+", "", text[m.end() :]).strip()
+    if len(_WORD.findall(question)) < MIN_QUESTION_WORDS:
+        return None, f"question shorter than {MIN_QUESTION_WORDS} words: {question!r}"
+    return question, "trigger"
+
+
 def parse_trigger(text: str) -> str | None:
-    """The question after a leading "Crew" alias, or None (no alias / nothing asked)."""
-    m = _TRIGGER.match(text or "")
-    if not m:
-        return None
-    question = m.group(1).strip()
-    return question or None
+    """The question after the wake word, or None (no wake word / too short). Pure."""
+    return match_trigger(text)[0]
 
 
 def seed_docs() -> str:
@@ -114,7 +160,10 @@ def build_messages(
     brief: str, recent: list[dict[str, Any]], speaker: str, question: str
 ) -> list[dict[str, str]]:
     system = SYSTEM_PROMPT.format(
-        brief=brief.strip() or "(no brief)", experts=experts_text(), docs=seed_docs()
+        agent=get_settings().AGENT_NAME,
+        brief=brief.strip() or "(no brief)",
+        experts=experts_text(),
+        docs=seed_docs(),
     )
     transcript = "\n".join(f"{u['speaker']}: {u['text']}" for u in recent) or "(empty)"
     user = f"Recent transcript (last 2 minutes):\n{transcript}\n\n{speaker} asks you: {question}"
@@ -148,23 +197,34 @@ async def _safe(coro, default):
 
 async def handle(meeting_id: str, utterance: dict[str, Any]) -> None:
     """Entry point from the transcript webhook task. Never raises."""
+    text = str(utterance.get("text") or "")
+    log.info("utterance %s %s: %s", meeting_id, utterance.get("speaker"), text[:80])
+    question, reason = match_trigger(text)
+    if question is None:
+        log.info("no trigger in %s: %s", meeting_id, reason)
+        return
+    log.info("trigger in %s: %r", meeting_id, question)
+    await ask(meeting_id, utterance, question)
+
+
+async def ask(meeting_id: str, utterance: dict[str, Any], question: str) -> bool:
+    """Answer flow without the wake-word check (also POST /debug/ask). Keeps the speaking,
+    busy and delegate-mode guards. False if dropped by a guard or failed. Never raises."""
     try:
-        question = parse_trigger(str(utterance.get("text") or ""))
-        if question is None:
-            return
         if agent_voice.is_speaking(meeting_id):
-            log.info("crew trigger ignored (agent speaking) in %s", meeting_id)
-            return
+            log.info("trigger ignored (agent speaking) in %s", meeting_id)
+            return False
         if meeting_id in _busy:
-            log.info("crew trigger dropped (answer in progress) in %s: %r", meeting_id, question)
-            return
+            log.info("trigger dropped (answer in progress) in %s: %r", meeting_id, question)
+            return False
         _busy.add(meeting_id)
         try:
-            await _answer(meeting_id, utterance, question)
+            return await _answer(meeting_id, utterance, question)
         finally:
             _busy.discard(meeting_id)
     except Exception:
         log.exception("orchestrator failed for meeting %s", meeting_id)
+        return False
 
 
 async def _orb(coro) -> None:
@@ -175,10 +235,10 @@ async def _orb(coro) -> None:
         log.info("orb signal failed: %s", e.__class__.__name__)
 
 
-async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> None:
+async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> bool:
     t0 = time.monotonic()
     if await db.get_meeting_mode(meeting_id) != "delegate":
-        return  # notetaker: listen only
+        return False  # notetaker: listen only
     await _orb(agent_voice.send_state(meeting_id, "thinking"))
     asked_by = str(utterance.get("speaker") or "Someone")
     call_ts = float(utterance.get("ts") or 0.0)
@@ -188,7 +248,7 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
         _safe(db.get_recent_utterances(meeting_id, call_ts - CONTEXT_WINDOW_S), []),
     )
     messages = build_messages(brief, recent, asked_by, question)
-    task = asyncio.create_task(llm.chat_json(messages, "crew_answer", ANSWER_SCHEMA))
+    task = asyncio.create_task(llm.chat_json(messages, "agent_answer", ANSWER_SCHEMA))
 
     filler = False
     wait_s = max(0.0, FILLER_AFTER_S - (time.monotonic() - t0))
@@ -199,9 +259,9 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
     try:
         result = _normalize(await task)
     except Exception as e:
-        log.warning("crew LLM failed in %s, staying silent: %s", meeting_id, e)
+        log.warning("agent LLM failed in %s, staying silent: %s", meeting_id, e)
         await _orb(agent_voice.send_state(meeting_id, "idle"))
-        return
+        return False
     t_llm = time.monotonic()
 
     escalation_id: str | None = None
@@ -230,7 +290,7 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
     delivered = await speech.say(meeting_id, text)
     t_played = time.monotonic()
     log.info(
-        "crew latency %s: trigger->llm %dms, llm->tts+push %dms, total %dms (filler=%s, "
+        "agent latency %s: trigger->llm %dms, llm->tts+push %dms, total %dms (filler=%s, "
         "delivered=%s, conf=%.2f, needs_expert=%s, topic=%r)",
         meeting_id,
         _ms(t0, t_llm),
@@ -250,3 +310,4 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
         "agent_said",
         {"id": row["id"], "text": text, "ts": ts, "in_reply_to": escalation_id},
     )
+    return True

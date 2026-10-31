@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = ""
     DEMO_TOKEN: str = ""
     WEBHOOK_TOKEN: str = ""
+    AGENT_NAME: str = "Atlas"  # wake word + bot display name (M6.3)
     CORS_ORIGINS: str = "*"  # comma-separated origins for the app / web client
 
 

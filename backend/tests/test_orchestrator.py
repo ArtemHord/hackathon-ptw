@@ -117,35 +117,81 @@ def utt(text, speaker="Misha", ts=382):
 @pytest.mark.parametrize(
     "text,question",
     [
-        ("Crew, what did Artem finish?", "what did Artem finish?"),
-        ("crew what did Artem finish", "what did Artem finish"),
-        ("CREW: status?", "status?"),
-        ("Cru, status?", "status?"),
-        ("Crue, status?", "status?"),
-        ("Kru, status?", "status?"),
-        ("Call Crew, status?", "status?"),
-        ("Hey Crew, status?", "status?"),
-        ("hey, crew - status?", "status?"),
-        ("... Crew, status?", "status?"),
-        ('"Crew, status?"', 'status?"'),
-        ("Crew,", None),
-        ("Crew?", None),
-        ("crew", None),
-        ("I asked Crew, status?", None),
-        ("Crewmate, status?", None),
-        ("Crude oil is up", None),
-        ("Crew's notes are great", None),
-        ("", None),
+        ("Atlas, what did Artem finish?", "what did Artem finish?"),
+        ("atlas what did Artem finish", "what did Artem finish"),
+        ("ATLAS: what is the status?", "what is the status?"),
+        ("Okay so Atlas, what did Artem finish?", "what did Artem finish?"),
+        ("blah. Atlas, when do we migrate to Postgres 17?", "when do we migrate to Postgres 17?"),
+        ("Hey Atlas what is our API limit", "what is our API limit"),
+        ("At last, what did Artem finish", "what did Artem finish"),
+        ("ok atlas, deploy status?", "deploy status?"),
+        ("Okay Atlas, deploy status?", "deploy status?"),
+        ("Atlass, deploy status?", "deploy status?"),
+        ("atlis deploy status", "deploy status"),
+        ("... Atlas, deploy status?", "deploy status?"),
+        ('"Atlas, deploy status?"', 'deploy status?"'),
+        ("one two three four five Atlas, deploy status?", "deploy status?"),  # 6th word
+        ("Atlas is covering today", "is covering today"),  # no question-word requirement
     ],
 )
-def test_alias_table(text, question):
+def test_trigger_positive(text, question):
     assert orchestrator.parse_trigger(text) == question
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Atlas",
+        "Atlas,",
+        "Atlas?",
+        "Atlas, status?",  # one word is not a question
+        "hey atlas",
+        "we finally made it at last",
+        "so at last, what did we finish",  # "at last" only as the first words
+        "one two three four five six Atlas, deploy status?",  # 7th word
+        "Morning! Artem is out today, so his AI delegate Atlas covers for him.",
+        "Atlases are heavy books",
+        "Atlas\u2019s notes are great",
+        "Crew, what did Artem finish?",  # the old wake word is gone
+        "",
+    ],
+)
+def test_trigger_negative(text):
+    assert orchestrator.parse_trigger(text) is None
+
+
+def test_match_trigger_reasons():
+    assert orchestrator.match_trigger("hello there")[1] == "no wake word"
+    assert "word 7" in orchestrator.match_trigger("a b c d e f Atlas, what is up")[1]
+    assert "shorter" in orchestrator.match_trigger("Atlas, status?")[1]
+
+
+def test_aliases_built_from_agent_name(monkeypatch):
+    assert orchestrator.wake_aliases("Atlas") == (
+        "hey atlas",
+        "okay atlas",
+        "ok atlas",
+        "atlas",
+        "atlass",
+        "atlis",
+    )
+    monkeypatch.setenv("AGENT_NAME", "Nova")
+    get_settings.cache_clear()
+    assert orchestrator.parse_trigger("Nova, what is our API limit?") == "what is our API limit?"
+    assert orchestrator.parse_trigger("Atlas, what is our API limit?") is None
+
+
+async def test_live_transcript_is_logged_with_reason(world, caplog):
+    with caplog.at_level(logging.INFO, logger="app.orchestrator"):
+        await orchestrator.handle(MID, utt("we finally made it at last"))
+    assert "utterance m_01 Misha: we finally made it at last" in caplog.text
+    assert "no trigger in m_01: no wake word" in caplog.text
 
 
 @respx.mock
 async def test_normal_answer_path(world):
     route = respx.post(OPENAI_URL).mock(return_value=completion())
-    await orchestrator.handle(MID, utt("Crew, what did Artem finish this week?"))
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish this week?"))
 
     assert world["said"] == ["Artem finished the Slack escalation flow."]
     assert world["hook"] == []
@@ -155,6 +201,8 @@ async def test_normal_answer_path(world):
     assert body["response_format"]["type"] == "json_schema"
     assert body["response_format"]["json_schema"]["strict"] is True
     system = body["messages"][0]["content"]
+    assert system.startswith("You are Atlas, Artem's delegate in this call.")
+    assert "what the tartan finish" in system  # noisy-ASR hint
     assert "cannot promise dates" in system  # brief always in the system prompt
     assert "50 requests per second" in system  # seed docs
     assert "Dima: database" in system  # experts
@@ -168,7 +216,7 @@ async def test_low_confidence_calls_hook_and_names_expert(world):
     respx.post(OPENAI_URL).mock(
         return_value=completion(answer="Maybe in Q1.", confidence=0.3, topic="postgres")
     )
-    await orchestrator.handle(MID, utt("Crew, when do we migrate to Postgres 17?"))
+    await orchestrator.handle(MID, utt("Atlas, when do we migrate to Postgres 17?"))
 
     assert world["hook"] == [(MID, "when do we migrate to Postgres 17?", "postgres", "Misha")]
     assert world["said"] == ["I don't know, asking Dima now."]
@@ -181,7 +229,7 @@ async def test_hook_dict_sets_in_reply_to(world):
     respx.post(OPENAI_URL).mock(
         return_value=completion(answer="", confidence=0.2, needs_expert=True, topic="infra")
     )
-    await orchestrator.handle(MID, utt("Crew, is the deploy green?"))
+    await orchestrator.handle(MID, utt("Atlas, is the deploy green?"))
     assert world["said"] == ["I don't know, asking Dima now."]
     assert world["events"][0]["data"]["in_reply_to"] == "esc_01"
 
@@ -191,7 +239,7 @@ async def test_hook_none_asks_the_team(world):
     respx.post(OPENAI_URL).mock(
         return_value=completion(answer="", confidence=0.1, needs_expert=True, topic="infra")
     )
-    await orchestrator.handle(MID, utt("Crew, is the deploy green?"))
+    await orchestrator.handle(MID, utt("Atlas, is the deploy green?"))
     assert world["said"] == ["I don't know yet, I'll ask the team."]
 
 
@@ -206,7 +254,7 @@ async def test_commitment_question_goes_to_owner(world):
             topic="owner",
         )
     )
-    await orchestrator.handle(MID, utt("Crew, can Artem ship auth caching by Friday?"))
+    await orchestrator.handle(MID, utt("Atlas, can Artem ship auth caching by Friday?"))
     system = json.loads(route.calls.last.request.content)["messages"][0]["content"]
     assert "NEVER make commitments" in system
     assert world["hook"][0][2] == "owner"
@@ -217,7 +265,7 @@ async def test_commitment_question_goes_to_owner(world):
 async def test_notetaker_is_silent(world):
     world["mode"] = "notetaker"
     route = respx.post(OPENAI_URL).mock(return_value=completion())
-    await orchestrator.handle(MID, utt("Crew, what did Artem finish?"))
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish?"))
     assert not route.called
     assert world["said"] == [] and world["events"] == []
 
@@ -226,7 +274,7 @@ async def test_notetaker_is_silent(world):
 async def test_ignored_while_speaking(world):
     world["speaking"] = True
     route = respx.post(OPENAI_URL).mock(return_value=completion())
-    await orchestrator.handle(MID, utt("Crew, what did Artem finish?"))
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish?"))
     assert not route.called
     assert world["said"] == []
 
@@ -247,14 +295,14 @@ async def test_slow_llm_plays_filler_first(world, monkeypatch):
         return completion()
 
     respx.post(OPENAI_URL).mock(side_effect=slow)
-    await orchestrator.handle(MID, utt("Crew, what did Artem finish?"))
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish?"))
     assert world["said"] == ["<filler>", "Artem finished the Slack escalation flow."]
 
 
 @respx.mock
 async def test_fast_llm_no_filler(world):
     respx.post(OPENAI_URL).mock(return_value=completion())
-    await orchestrator.handle(MID, utt("Crew, what did Artem finish?"))
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish?"))
     assert world["fillers"] == 0
 
 
@@ -269,8 +317,8 @@ async def test_second_trigger_dropped_while_busy(world, monkeypatch, caplog):
     route = respx.post(OPENAI_URL).mock(side_effect=slow)
     with caplog.at_level(logging.INFO, logger="app.orchestrator"):
         await asyncio.gather(
-            orchestrator.handle(MID, utt("Crew, first?")),
-            orchestrator.handle(MID, utt("Crew, second?")),
+            orchestrator.handle(MID, utt("Atlas, first question?")),
+            orchestrator.handle(MID, utt("Atlas, second question?")),
         )
     assert route.call_count == 1
     assert len(world["said"]) == 1
@@ -280,7 +328,7 @@ async def test_second_trigger_dropped_while_busy(world, monkeypatch, caplog):
 @respx.mock
 async def test_agent_said_event_shape(world):
     respx.post(OPENAI_URL).mock(return_value=completion())
-    await orchestrator.handle(MID, utt("Crew, what did Artem finish?", ts=380))
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish?", ts=380))
 
     mock = json.loads((ROOT / "mocks" / "ws_agent_said.json").read_text())
     [event] = world["events"]
@@ -299,7 +347,7 @@ async def test_no_openai_key_stays_silent(world, monkeypatch, caplog):
     get_settings.cache_clear()
     with respx.mock:  # any real request would fail as unmocked
         with caplog.at_level(logging.WARNING, logger="app.orchestrator"):
-            await orchestrator.handle(MID, utt("Crew, what did Artem finish?"))
+            await orchestrator.handle(MID, utt("Atlas, what did Artem finish?"))
     assert world["said"] == [] and world["events"] == []
     assert "not configured" in caplog.text
 
@@ -307,7 +355,7 @@ async def test_no_openai_key_stays_silent(world, monkeypatch, caplog):
 @respx.mock
 async def test_llm_http_error_never_raises(world):
     respx.post(OPENAI_URL).mock(return_value=httpx.Response(500, json={"error": {}}))
-    await orchestrator.handle(MID, utt("Crew, what did Artem finish?"))
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish?"))
     assert world["said"] == []
 
 
@@ -316,7 +364,7 @@ async def test_db_error_never_raises(world, monkeypatch):
         raise RuntimeError("DATABASE_URL is not set")
 
     monkeypatch.setattr(db, "get_meeting_mode", boom)
-    await orchestrator.handle(MID, utt("Crew, what did Artem finish?"))
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish?"))
     assert world["said"] == []
     assert MID not in orchestrator._busy
 
@@ -324,5 +372,41 @@ async def test_db_error_never_raises(world, monkeypatch):
 @respx.mock
 async def test_webhook_hook_wires_to_orchestrator(world):
     respx.post(OPENAI_URL).mock(return_value=completion())
-    await webhooks_recall.orchestrator_hook(MID, utt("Crew, what did Artem finish?"))
+    await webhooks_recall.orchestrator_hook(MID, utt("Atlas, what did Artem finish?"))
     assert world["said"] == ["Artem finished the Slack escalation flow."]
+
+
+async def test_factcheck_skips_trigger(monkeypatch):
+    from app import factcheck
+
+    calls = []
+
+    async def chat_json(*a, **k):
+        calls.append(a)
+        return {}
+
+    monkeypatch.setattr(llm, "chat_json", chat_json)
+    monkeypatch.setattr(factcheck.llm, "chat_json", chat_json)
+    await factcheck._check(MID, utt("Okay so Atlas, what is our API limit of 50?"))
+    assert calls == []
+
+
+@respx.mock
+async def test_mid_segment_trigger_reaches_llm_with_remainder(world):
+    route = respx.post(OPENAI_URL).mock(return_value=completion())
+    await orchestrator.handle(MID, utt("Right. Atlas, what are them did this week"))
+    assert world["said"] == ["Artem finished the Slack escalation flow."]
+    user = json.loads(route.calls.last.request.content)["messages"][1]["content"]
+    assert user.endswith("Misha asks you: what are them did this week")
+
+
+async def test_ask_keeps_guards_without_wake_word(world):
+    world["speaking"] = True
+    assert await orchestrator.ask(MID, utt("what the tartan finish"), "what") is False
+    world["speaking"] = False
+    world["mode"] = "notetaker"
+    assert await orchestrator.ask(MID, utt("what the tartan finish"), "what") is False
+    orchestrator._busy.add(MID)
+    world["mode"] = "delegate"
+    assert await orchestrator.ask(MID, utt("x"), "x") is False
+    assert world["said"] == []

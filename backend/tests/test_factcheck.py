@@ -123,7 +123,7 @@ async def test_change_maps_to_unverified(fx):
 async def test_crew_trigger_skipped(fx):
     with respx.mock(assert_all_called=False) as m:
         route = m.post(OPENAI).mock(return_value=llm_reply())
-        await factcheck.check("m_01", {**LINE, "text": "Crew, what is our API limit of 50?"})
+        await factcheck.check("m_01", {**LINE, "text": "Atlas, what is our API limit of 50?"})
         assert not route.called
     assert fx.stored == []
 

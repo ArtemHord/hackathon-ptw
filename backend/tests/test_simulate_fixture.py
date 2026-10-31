@@ -13,5 +13,5 @@ def test_demo_transcript_fixture():
     assert times == sorted(times)
     keys = {(line["speaker"], line["at_s"]) for line in lines}
     assert len(keys) == len(lines)  # unique (speaker, ts_start) like the DB constraint
-    crew = [line for line in lines if line["text"].startswith("Crew,")]
-    assert len(crew) == 3
+    asks = [line for line in lines if line["text"].startswith("Atlas,")]
+    assert len(asks) == 3

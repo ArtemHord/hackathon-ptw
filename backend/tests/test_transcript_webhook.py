@@ -48,7 +48,7 @@ def store(monkeypatch):
     return {"rows": rows, "hooks": hooks}
 
 
-def payload(name="Julian", start=305.2, words=("Crew,", "what", "is", "our", "API", "limit?")):
+def payload(name="Julian", start=305.2, words=("Atlas,", "what", "is", "our", "API", "limit?")):
     return {
         "event": "transcript.data",
         "data": {
@@ -82,13 +82,20 @@ def drain(timeout=2.0):
 def test_parse_transcript():
     p = webhooks_recall.parse_transcript(payload())
     assert p["speaker"] == "Julian"
-    assert p["text"] == "Crew, what is our API limit?"
+    assert p["text"] == "Atlas, what is our API limit?"
     assert p["ts_start"] == pytest.approx(305.2)
     assert p["ts_end"] == pytest.approx(305.2 + 5 * 0.3 + 0.25)
 
 
+@pytest.mark.parametrize("name", ["Atlas (AI) for Artem", "Call Crew (AI) for Artem"])
+def test_is_bot_speaker(name):
+    assert webhooks_recall.is_bot_speaker(name)
+    assert webhooks_recall.parse_transcript(payload(name=name)) is None
+
+
 def test_parse_skips_bot_and_empty():
-    assert webhooks_recall.parse_transcript(payload(name="Call Crew (AI) for Artem")) is None
+    assert not webhooks_recall.is_bot_speaker("Julian")
+    assert webhooks_recall.parse_transcript(payload(name="Atlas (AI) for Artem")) is None
     assert webhooks_recall.parse_transcript(payload(words=())) is None
     assert webhooks_recall.parse_transcript({"event": "bot.status_change"}) is None
 
@@ -134,7 +141,7 @@ def test_duplicate_is_one_insert_one_event(store):
     assert first["data"] == {
         "id": "u_01",
         "speaker": "Julian",
-        "text": "Crew, what is our API limit?",
+        "text": "Atlas, what is our API limit?",
         "ts": 305,
     }
     assert set(first["data"]) == {"id", "speaker", "text", "ts"}  # mocks/ws_utterance.json
@@ -146,6 +153,7 @@ def test_bot_speech_skipped(store):
     with TestClient(app) as c:
         with c.websocket_connect("/app/ws?meeting_id=m_01&token=demo-t") as ws:
             c.post(URL, json=payload(name="Call Crew (AI) for Artem"))
+            c.post(URL, json=payload(name="Atlas (AI) for Artem", start=0.5))
             drain()
             c.post(URL, json=payload(start=1.0, words=("Hi.",)))
             msg = ws.receive_json()

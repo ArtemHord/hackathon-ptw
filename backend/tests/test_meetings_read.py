@@ -84,7 +84,7 @@ def client(monkeypatch):
         )
         await c.execute("insert into experts (id,name) values ('x1','Dima')")
         for i, (sp, tx, ts) in enumerate(
-            [("Julian", "Crew, what is our API limit?", 305), ("Dima", "Yes, 15 min TTL", 380)]
+            [("Julian", "Atlas, what is our API limit?", 305), ("Dima", "Yes, 15 min TTL", 380)]
         ):
             await c.execute(
                 "insert into utterances (id,meeting_id,speaker,text,ts_start) "

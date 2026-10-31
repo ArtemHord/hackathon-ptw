@@ -94,7 +94,7 @@ def world(monkeypatch):
             {"id": "u1", "speaker": "Misha", "text": "Morning!", "ts_start": 300.0},
             {"id": "u2", "speaker": "Julian", "text": "Billing page is done.", "ts_start": 320.0},
             {"id": "u3", "speaker": "Misha", "text": "Great.", "ts_start": 330.0},
-            {"id": "u4", "speaker": "Julian", "text": f"Crew, {QUESTION}", "ts_start": 340.0},
+            {"id": "u4", "speaker": "Julian", "text": f"Atlas, {QUESTION}", "ts_start": 340.0},
         ],
         "esc": {},
         "facts": [],
@@ -259,7 +259,7 @@ async def test_happy_path(world, monkeypatch):
     assert q[0]["context_lines"] == [
         "Julian: Billing page is done.",
         "Misha: Great.",
-        f"Julian: Crew, {QUESTION}",
+        f"Julian: Atlas, {QUESTION}",
     ]
     assert world["esc"]["esc_01"]["external_msg_id"] == THREAD
     assert "esc_01" in escalation._timeouts
@@ -437,7 +437,7 @@ def completion(answer="", confidence=0.2, needs_expert=True, topic="postgres"):
 @respx.mock
 async def test_orchestrator_says_asking_dima_with_escalation_id(world):
     respx.post(OPENAI_URL).mock(return_value=completion())
-    utt = {"id": "u4", "speaker": "Julian", "text": f"Crew, {QUESTION}", "ts": 340}
+    utt = {"id": "u4", "speaker": "Julian", "text": f"Atlas, {QUESTION}", "ts": 340}
     await orchestrator.handle(MID, utt)
     await settle()
 

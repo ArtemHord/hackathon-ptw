@@ -27,7 +27,7 @@ class LLMError(Exception):
 
 
 def _http() -> httpx.AsyncClient:
-    # One pooled client: keeps the TLS connection warm between "Crew, ..." triggers.
+    # One pooled client: keeps the TLS connection warm between "Atlas, ..." triggers.
     global _client
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(base_url=BASE_URL, timeout=TIMEOUT_S)
