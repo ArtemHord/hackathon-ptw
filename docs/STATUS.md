@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M3.5 Slack E2E · waiting on Artem (06:11): Slack app + Railway SLACK_BOT_TOKEN/SLACK_SIGNING_SECRET + Dima email
+- In progress: E2E — verifier local run (hero + tools a–f); Artem: prod integrations all unset (Slack/Telegram/Jira) → setup in /ui, then live checklist docs/DEMO.md
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -100,6 +100,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 07:59 · E2E · prod /health ok; /settings: Slack, Telegram, Jira all unset; verifier started on local E2E (hero + web_search/search_knowledge/create_doc/escalation/AGENT_TOOLS off) · —
 - 07:57 · M8.1 · blockers fixed (14 s total budget, create_doc lock + casefold); 324 tests, ruff green; merged m8-agent-tools → main · 5df1fa8 · pushed
 - 07:58 · M8.1 · built (321 tests; live smoke: web_search 3.5–4.2 s, Postgres 17 still escalates 3.6–5.6 s); review: 2 blockers (stacked 9 s+15 s timeouts, create_doc race/case) → back to senior-developer · —
 - 07:16 · PR #1 · merged on GitHub (b6af7fc); local main merged, 308 tests + ruff green · pushed
