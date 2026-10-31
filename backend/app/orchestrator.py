@@ -37,6 +37,13 @@ _SHORT = "question shorter than"
 # speaker's next utterance with >= MIN_QUESTION_WORDS words is the question.
 ARMED_S = 6.0
 _armed: dict[tuple[str, str], float] = {}  # (meeting_id, speaker) -> monotonic deadline
+# Partial question (M6.3b): Deepgram splits "Atlas, what did" | "Artem finish this week?".
+# A question under PARTIAL_MAX_WORDS words without "?" waits PARTIAL_WAIT_S for the same
+# speaker's next utterance, then is merged with it, or answered as is on timeout.
+PARTIAL_MAX_WORDS = 4
+PARTIAL_WAIT_S = 2.5
+# (meeting_id, speaker) -> (partial question, its utterance, timeout task)
+_pending: dict[tuple[str, str], tuple[str, dict[str, Any], asyncio.Task]] = {}
 
 
 def _now() -> float:
@@ -210,6 +217,16 @@ async def handle(meeting_id: str, utterance: dict[str, Any]) -> None:
     log.info("utterance %s %s: %s", meeting_id, utterance.get("speaker"), text[:80])
     key = (meeting_id, str(utterance.get("speaker") or ""))
     question, reason = match_trigger(text)
+    pending = _pending.pop(key, None)
+    if pending is not None:
+        partial, first, timer = pending
+        timer.cancel()
+        if question is None:  # the rest of the held question: merge and answer now
+            merged = f"{partial} {_strip_lead(text)}".strip()
+            log.info("partial merged in %s: %r", meeting_id, merged)
+            await ask(meeting_id, first, merged)
+            return
+        # a new full trigger from the same speaker replaces the held partial
     if question is None and reason.startswith(_SHORT):
         _armed[key] = _now() + ARMED_S
         log.info("armed %s %s for %.0fs: %s", meeting_id, key[1], ARMED_S, reason)
@@ -223,7 +240,34 @@ async def handle(meeting_id: str, utterance: dict[str, Any]) -> None:
     else:
         _armed.pop(key, None)
         log.info("trigger in %s: %r", meeting_id, question)
+    if _is_partial(question):
+        timer = asyncio.create_task(_answer_partial_later(key, utterance, question))
+        _pending[key] = (question, utterance, timer)
+        log.info("partial → waiting %.1fs in %s: %r", PARTIAL_WAIT_S, meeting_id, question)
+        return
     await ask(meeting_id, utterance, question)
+
+
+def _strip_lead(text: str) -> str:
+    return re.sub(r"^[\W_]+", "", text).strip()
+
+
+def _is_partial(question: str) -> bool:
+    q = question.rstrip()
+    return len(_WORD.findall(q)) < PARTIAL_MAX_WORDS and not q.endswith("?")
+
+
+async def _answer_partial_later(
+    key: tuple[str, str], utterance: dict[str, Any], question: str
+) -> None:
+    """Never stay silent: no follow-up within PARTIAL_WAIT_S -> answer the partial as is."""
+    await asyncio.sleep(PARTIAL_WAIT_S)
+    entry = _pending.get(key)
+    if entry is None or entry[2] is not asyncio.current_task():
+        return
+    _pending.pop(key, None)
+    log.info("partial timeout in %s, answering: %r", key[0], question)
+    await ask(key[0], utterance, question)
 
 
 def _armed_question(key: tuple[str, str], text: str) -> str | None:
@@ -236,7 +280,7 @@ def _armed_question(key: tuple[str, str], text: str) -> str | None:
         _armed.pop(key, None)
         log.info("armed expired %s %s", *key)
         return None
-    question = re.sub(r"^[\W_]+", "", text).strip()
+    question = _strip_lead(text)
     if len(_WORD.findall(question)) < MIN_QUESTION_WORDS:
         return None
     _armed.pop(key, None)

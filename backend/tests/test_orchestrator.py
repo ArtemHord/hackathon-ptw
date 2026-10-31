@@ -27,7 +27,11 @@ def env(monkeypatch):
     llm._client = None
     orchestrator._busy.clear()
     orchestrator._armed.clear()
+    orchestrator._pending.clear()
     yield
+    for _, _, timer in orchestrator._pending.values():
+        timer.cancel()
+    orchestrator._pending.clear()
     get_settings.cache_clear()
     llm._client = None
 
@@ -469,3 +473,60 @@ async def test_armed_question_keeps_guards(world, clock):
     await orchestrator.handle(MID, utt("Okay Atlas."))
     await orchestrator.handle(MID, utt("what did Artem finish?"))
     assert world["said"] == []
+
+
+def _question(route) -> str:
+    user = json.loads(route.calls.last.request.content)["messages"][1]["content"]
+    return user.split(" asks you: ", 1)[1]
+
+
+@respx.mock
+async def test_partial_question_merged_with_next_utterance(world, caplog):
+    route = respx.post(OPENAI_URL).mock(return_value=completion())
+    with caplog.at_level(logging.INFO, logger="app.orchestrator"):
+        await orchestrator.handle(MID, utt("Atlas, what did"))
+        assert route.call_count == 0
+        assert "partial → waiting" in caplog.text
+        await orchestrator.handle(MID, utt("Artem finish this week?"))
+    assert "partial merged in m_01: 'what did Artem finish this week?'" in caplog.text
+    assert route.call_count == 1
+    assert _question(route) == "what did Artem finish this week?"
+    assert world["said"] == ["Artem finished the Slack escalation flow."]
+    assert orchestrator._pending == {}
+
+
+@respx.mock
+async def test_partial_without_follow_up_answers_after_timeout(world, monkeypatch, caplog):
+    monkeypatch.setattr(orchestrator, "PARTIAL_WAIT_S", 0.05)
+    route = respx.post(OPENAI_URL).mock(return_value=completion())
+    with caplog.at_level(logging.INFO, logger="app.orchestrator"):
+        await orchestrator.handle(MID, utt("Atlas, deploy status"))
+        assert route.call_count == 0
+        await asyncio.sleep(0.2)
+    assert "partial timeout in m_01" in caplog.text
+    assert route.call_count == 1
+    assert _question(route) == "deploy status"
+    assert world["said"] == ["Artem finished the Slack escalation flow."]
+    assert orchestrator._pending == {}
+
+
+@respx.mock
+async def test_full_question_answers_immediately(world):
+    route = respx.post(OPENAI_URL).mock(return_value=completion())
+    await orchestrator.handle(MID, utt("Atlas, what is our API limit?"))
+    assert route.call_count == 1
+    assert _question(route) == "what is our API limit?"
+    assert orchestrator._pending == {}
+
+
+@respx.mock
+async def test_partial_not_merged_with_other_speaker(world, monkeypatch):
+    monkeypatch.setattr(orchestrator, "PARTIAL_WAIT_S", 0.05)
+    route = respx.post(OPENAI_URL).mock(return_value=completion())
+    await orchestrator.handle(MID, utt("Atlas, what did", speaker="Misha"))
+    await orchestrator.handle(MID, utt("Artem finish this week?", speaker="Dima"))
+    assert route.call_count == 0
+    assert (MID, "Misha") in orchestrator._pending
+    await asyncio.sleep(0.2)
+    assert route.call_count == 1
+    assert _question(route) == "what did"  # answered alone, never merged with Dima
