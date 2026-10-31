@@ -4,8 +4,8 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M3.3b fake notifier + /debug/expert-reply + simulator flag (developer)
-- Blocked: —
+- In progress: M4.3a GET /meetings + GET /meetings/{id}?since= (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
+- Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
 Cut rules: escalation not end-to-end by 06:30 → drop M5. After 08:30 → bug fixes only. 11:00 → freeze. If M2 not done by 05:30 → start M3 anyway.
@@ -34,7 +34,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M3.1 `Notifier` interface + expert matching
 - [x] M3.2 Slack adapter + `/webhooks/slack`
 - [x] M3.3a Escalation loop core: start → Slack DM, expert reply → voice + Recall chat + WS, 2-min timeout → action item (senior-developer)
-- [ ] M3.3b Fake notifier + `/debug/expert-reply` + simulator `--expert-reply` for E2E without Slack (developer)
+- [x] M3.3b Fake notifier + `/debug/expert-reply` + simulator `--expert-reply` for E2E without Slack (developer)
 - [ ] M3.4 Telegram adapter (P2, fallback) — CUT unless M3.5 passes before 06:30
 - [ ] M3.5 First end-to-end demo run (~06:15)
 
@@ -59,6 +59,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - DB: `001_init.sql`, text ids (uuid), `utterances` dedup → `INSERT … ON CONFLICT (meeting_id, speaker, ts_start) DO NOTHING`; Slack reply lookup `escalations.external_msg_id`. `agent_said` table for poll mode.
 - Recall/Slack facts: `docs/decisions.md` #13–20 (one bot create with output_media + recording_config, `recallai_streaming` prioritize_low_latency; status via dashboard webhook, post-call on `bot.done`; Slack v0 HMAC, ignore bot_id/bot_message, dedupe event_id).
 - Orchestrator: `orchestrator.on_needs_expert(meeting_id, question, topic, asked_by)` hook (M3 replaces; may return name or {expert, escalation_id}); OpenAI via httpx in llm.py (decision 23); latency log line "crew latency".
+- Stage backup: `POST /debug/expert-reply?token=WEBHOOK_TOKEN {escalation_id,text}` speaks the answer if Slack fails; `GET /debug/escalations?meeting_id=&token=`. No SLACK_BOT_TOKEN → fake notifier (logs only).
 - Run: `cd backend && uv run pytest -q`; simulate: `cd backend && DATABASE_URL=… WEBHOOK_TOKEN=… DEMO_TOKEN=… uv run python ../scripts/simulate_meeting.py --speed 20` (needs running backend + DB; exit 1 if utterance events != unique lines); Recall status dashboard URL `{PUBLIC_BASE_URL}/webhooks/recall/status?token={WEBHOOK_TOKEN}`; Docker CMD uvicorn on `${PORT:-8000}`; agent-page/ outside build context → serve from backend/ (M2.1).
 
 ## Human tasks (Artem, in parallel — we build on respx mocks, ask only for live checks)
@@ -70,6 +71,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:49 · M3.3b · fake notifier + debug reply endpoints + simulator flags; 128 tests · abd82d4 · M3 code complete, M3.5 waits on Artem
 - 03:45 · M3.3a · escalation loop: fast start, SQL first-reply-wins, timeout → spoken line + action item, late reply stored; 125 tests · 7864a9f
 - 03:39 · M3.2 · Slack adapter + webhook (raw-body HMAC, 300 s window, retry skip, event_id dedupe, bot filter); 113 tests · 23b2ff1
 - 03:36 · M3.1 · Notifier protocol + registry, match_expert (postgres/infra→Dima, else owner Artem), experts seeded from json (real DB ok); 93 tests · d603dc7
