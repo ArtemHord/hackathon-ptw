@@ -22,9 +22,11 @@ from app import (
     web_ui,
     webhooks_recall,
     webhooks_slack,
+    webhooks_telegram,
 )
 from app.config import get_settings
 from app.notifier import slack as _slack  # noqa: F401  registers the "slack" notifier
+from app.notifier import telegram as _telegram  # noqa: F401  registers "telegram"
 
 # app.* INFO lines (e.g. the orchestrator latency log) are invisible under uvicorn otherwise.
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -55,6 +57,7 @@ meetings.install_error_handlers(app)
 app.include_router(meetings.router)
 app.include_router(webhooks_recall.router)
 app.include_router(webhooks_slack.router)
+app.include_router(webhooks_telegram.router)
 app.include_router(kb.router)
 app.include_router(chat.router)
 app.include_router(hub.router)

@@ -450,3 +450,45 @@ async def test_orchestrator_says_asking_dima_with_escalation_id(world):
 
     await escalation.on_expert_reply(DM, THREAD, "Thursday", "U_DIMA")
     assert world["said"][-1] == "Dima says: Thursday"
+
+
+@respx.mock
+async def test_telegram_expert_end_to_end(world, monkeypatch):
+    """Real TelegramNotifier + webhook handler against the fake DB: question -> reply -> spoken."""
+    from app import webhooks_telegram
+    from app.notifier import telegram as _tg  # noqa: F401  registers "telegram"
+
+    tg = "https://api.telegram.org/bot123:tg-token"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:tg-token")
+    get_settings.cache_clear()
+    dima = Expert(
+        name="Dima", topics=["postgres"], channel="telegram", telegram_chat_id="555", id="ex_dima"
+    )
+    monkeypatch.setattr(escalation, "_cache", [dima, EXPERTS[1]])
+    sent = respx.post(f"{tg}/sendMessage").mock(
+        return_value=httpx.Response(
+            200, json={"ok": True, "result": {"message_id": 42, "chat": {"id": 555}}}
+        )
+    )
+    res = await escalation.start(MID, QUESTION, "postgres", "Julian")
+    await settle()
+    assert res == {"expert": "Dima", "escalation_id": "esc_01"}
+    assert world["esc"]["esc_01"]["external_msg_id"] == "42"
+    assert world["esc"]["esc_01"]["external_channel_id"] == "555"
+
+    await webhooks_telegram.process_update(
+        {
+            "update_id": 1,
+            "message": {
+                "from": {"id": 555, "is_bot": False},
+                "chat": {"id": 555},
+                "text": "Thursday",
+                "reply_to_message": {"message_id": 42},
+            },
+        }
+    )
+    await settle()
+    assert world["said"] == ["Dima says: Thursday"]
+    assert len(events(world, "escalation_answered")) == 1
+    thanks = json.loads(sent.calls.last.request.content)
+    assert thanks["reply_parameters"] == {"message_id": 42} and thanks["chat_id"] == "555"

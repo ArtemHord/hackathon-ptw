@@ -210,6 +210,22 @@ async def test_telegram_test_registers_webhook():
 
 
 @respx.mock
+@pytest.mark.parametrize("secret", ["", "bad secret!"])
+async def test_telegram_test_skips_webhook_without_valid_secret(secret):
+    await runtime.save({"TELEGRAM_BOT_TOKEN": "123:tg-token", "TELEGRAM_WEBHOOK_SECRET": secret})
+    respx.post(f"{TG}/getMe").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {"username": "crew_bot"}})
+    )
+    hook = respx.post(f"{TG}/setWebhook").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": True})
+    )
+    async with client() as c:
+        r = (await c.post("/integrations/telegram/test", headers=AUTH)).json()
+    assert r["ok"] is False and "secret" in r["detail"] and r["bot_username"] == "crew_bot"
+    assert not hook.called
+
+
+@respx.mock
 async def test_telegram_bad_token_does_not_leak_it():
     await runtime.save({"TELEGRAM_BOT_TOKEN": "123:tg-token"})
     respx.post(f"{TG}/getMe").mock(
