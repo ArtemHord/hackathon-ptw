@@ -96,6 +96,71 @@ struct BackendError: LocalizedError {
 }
 
 // MARK: - Response shapes
+// Decoding is tolerant on purpose: a null, a missing field, a number sent as a string or one malformed
+// element must not fail a whole response and empty a screen. Unknown enum values map to defaults later.
+
+/// Skips one element of any shape inside an array
+private struct AnyValue: Decodable {
+    init(from decoder: Decoder) throws {}
+}
+
+/// An array that drops the elements it can't decode instead of failing
+struct LossyList<T: Decodable>: Decodable {
+    let items: [T]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var items: [T] = []
+        while !container.isAtEnd {
+            if let item = try? container.decode(T.self) {
+                items.append(item)
+            } else {
+                _ = try? container.decode(AnyValue.self)
+            }
+        }
+        self.items = items
+    }
+}
+
+extension KeyedDecodingContainer {
+    func text(_ key: Key) -> String? {
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) {
+            return value.rounded() == value ? String(Int(value)) : String(value)
+        }
+        if let value = try? decodeIfPresent(Bool.self, forKey: key) { return String(value) }
+        return nil
+    }
+
+    func number(_ key: Key) -> Double? {
+        if let value = try? decodeIfPresent(Double.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return Double(value) }
+        return nil
+    }
+
+    func integer(_ key: Key) -> Int? {
+        number(key).flatMap { $0.isFinite ? Int($0.rounded()) : nil }
+    }
+
+    func flag(_ key: Key) -> Bool? {
+        if let value = try? decodeIfPresent(Bool.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value != 0 }
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return ["true", "1", "yes"].contains(value.lowercased()) }
+        return nil
+    }
+
+    func list<T: Decodable>(_ key: Key) -> [T]? {
+        (try? decodeIfPresent(LossyList<T>.self, forKey: key))?.items
+    }
+
+    /// The id is the only thing an item can't do without; numbers become strings
+    func id(_ key: Key) throws -> String {
+        guard let value = text(key), !value.isEmpty else {
+            throw DecodingError.keyNotFound(key, .init(codingPath: codingPath, debugDescription: "missing id"))
+        }
+        return value
+    }
+}
 
 struct MeetingDTO: Decodable, Sendable {
     let id: String
@@ -105,6 +170,19 @@ struct MeetingDTO: Decodable, Sendable {
     let status: String?
     let started_at: String?
     let duration_min: Int?
+
+    private enum CodingKeys: String, CodingKey { case id, title, platform, mode, status, started_at, duration_min }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        title = c.text(.title)
+        platform = c.text(.platform)
+        mode = c.text(.mode)
+        status = c.text(.status)
+        started_at = c.text(.started_at)
+        duration_min = c.integer(.duration_min)
+    }
 }
 
 struct MeetingDetailDTO: Decodable, Sendable {
@@ -122,6 +200,46 @@ struct MeetingDetailDTO: Decodable, Sendable {
     let escalations: [EscalationDTO]?
     let utterances: [UtteranceDTO]?
     let agent_said: [AgentSaidDTO]?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, platform, mode, status, started_at, duration_min, summary, decisions
+        case action_items, fact_checks, escalations, utterances, agent_said
+    }
+
+    /// A decision is a string; an object with `text` (or `decision`) is accepted too
+    private struct Decision: Decodable {
+        let text: String
+        private enum Keys: String, CodingKey { case text, decision, title }
+        init(from decoder: Decoder) throws {
+            if let value = try? decoder.singleValueContainer().decode(String.self) {
+                text = value
+                return
+            }
+            let c = try decoder.container(keyedBy: Keys.self)
+            guard let value = c.text(.text) ?? c.text(.decision) ?? c.text(.title) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: c.codingPath, debugDescription: "empty decision"))
+            }
+            text = value
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        title = c.text(.title)
+        platform = c.text(.platform)
+        mode = c.text(.mode)
+        status = c.text(.status)
+        started_at = c.text(.started_at)
+        duration_min = c.integer(.duration_min)
+        summary = c.text(.summary)
+        decisions = (c.list(.decisions) as [Decision]?)?.map(\.text).filter { !$0.isEmpty }
+        action_items = c.list(.action_items)
+        fact_checks = c.list(.fact_checks)
+        escalations = c.list(.escalations)
+        utterances = (c.list(.utterances) as [UtteranceDTO]?)?.filter { !$0.text.isEmpty }
+        agent_said = (c.list(.agent_said) as [AgentSaidDTO]?)?.filter { !$0.text.isEmpty }
+    }
 }
 
 struct UtteranceDTO: Decodable, Sendable {
@@ -129,6 +247,16 @@ struct UtteranceDTO: Decodable, Sendable {
     let speaker: String?
     let text: String
     let ts: Double?
+
+    private enum CodingKeys: String, CodingKey { case id, speaker, text, ts }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        speaker = c.text(.speaker)
+        text = c.text(.text) ?? ""
+        ts = c.number(.ts)
+    }
 }
 
 struct AgentSaidDTO: Decodable, Sendable {
@@ -136,6 +264,16 @@ struct AgentSaidDTO: Decodable, Sendable {
     let text: String
     let ts: Double?
     let in_reply_to: String?
+
+    private enum CodingKeys: String, CodingKey { case id, text, ts, in_reply_to }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        text = c.text(.text) ?? ""
+        ts = c.number(.ts)
+        in_reply_to = c.text(.in_reply_to)
+    }
 }
 
 struct ActionItemDTO: Decodable, Sendable {
@@ -145,6 +283,18 @@ struct ActionItemDTO: Decodable, Sendable {
     let due: String?
     let jira_key: String?
     let jira_url: String?
+
+    private enum CodingKeys: String, CodingKey { case id, owner, text, due, jira_key, jira_url }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        owner = c.text(.owner)
+        text = c.text(.text) ?? ""
+        due = c.text(.due)
+        jira_key = c.text(.jira_key)
+        jira_url = c.text(.jira_url)
+    }
 }
 
 struct FactCheckDTO: Decodable, Sendable {
@@ -153,7 +303,21 @@ struct FactCheckDTO: Decodable, Sendable {
     let verdict: String?
     let source: String?
     let correction: String?
+    let proposal_id: String?
     let ts: Double?
+
+    private enum CodingKeys: String, CodingKey { case id, claim, verdict, source, correction, proposal_id, ts }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        claim = c.text(.claim) ?? ""
+        verdict = c.text(.verdict)
+        source = c.text(.source)
+        correction = c.text(.correction)
+        proposal_id = c.text(.proposal_id)
+        ts = c.number(.ts)
+    }
 }
 
 struct EscalationDTO: Decodable, Sendable {
@@ -165,6 +329,22 @@ struct EscalationDTO: Decodable, Sendable {
     let ts: Double?
     let status: String?
     let answer: String?
+    let answered_ts: Double?
+
+    private enum CodingKeys: String, CodingKey { case id, expert, channel, question, asked_by, ts, status, answer, answered_ts }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        expert = c.text(.expert)
+        channel = c.text(.channel)
+        question = c.text(.question) ?? ""
+        asked_by = c.text(.asked_by)
+        ts = c.number(.ts)
+        status = c.text(.status)
+        answer = c.text(.answer)
+        answered_ts = c.number(.answered_ts)
+    }
 }
 
 struct ExpertDTO: Decodable, Sendable {
@@ -172,6 +352,16 @@ struct ExpertDTO: Decodable, Sendable {
     let name: String
     let role: String?
     let is_owner: Bool?
+
+    private enum CodingKeys: String, CodingKey { case id, name, role, is_owner }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        name = c.text(.name) ?? ""
+        role = c.text(.role)
+        is_owner = c.flag(.is_owner)
+    }
 }
 
 struct ChatResponseDTO: Decodable, Sendable {
@@ -184,10 +374,32 @@ struct ChatResponseDTO: Decodable, Sendable {
         let doc_id: String?
         let title: String?
         let version: Int?
+
+        private enum CodingKeys: String, CodingKey { case type, meeting_id, ts, speaker, text, doc_id, title, version }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            meeting_id = c.text(.meeting_id)
+            doc_id = c.text(.doc_id)
+            type = c.text(.type) ?? (meeting_id != nil ? "meeting" : "document")
+            ts = c.number(.ts)
+            speaker = c.text(.speaker)
+            text = c.text(.text)
+            title = c.text(.title)
+            version = c.integer(.version)
+        }
     }
 
     let answer: String
     let citations: [Citation]?
+
+    private enum CodingKeys: String, CodingKey { case answer, citations }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        answer = c.text(.answer) ?? ""
+        citations = c.list(.citations)
+    }
 }
 
 // MARK: - REST
@@ -196,9 +408,9 @@ struct BackendClient: Sendable {
     let settings: BackendSettings
 
     func meetings() async throws -> [MeetingDTO] {
-        struct List: Decodable { let items: [MeetingDTO] }
+        struct List: Decodable { let items: LossyList<MeetingDTO> }
         let list: List = try await request("GET", "/meetings")
-        return list.items
+        return list.items.items
     }
 
     func meeting(_ id: String) async throws -> MeetingDetailDTO {
@@ -206,9 +418,9 @@ struct BackendClient: Sendable {
     }
 
     func experts() async throws -> [ExpertDTO] {
-        struct List: Decodable { let items: [ExpertDTO] }
+        struct List: Decodable { let items: LossyList<ExpertDTO> }
         let list: List = try await request("GET", "/experts")
-        return list.items
+        return list.items.items
     }
 
     func chat(_ question: String) async throws -> ChatResponseDTO {
