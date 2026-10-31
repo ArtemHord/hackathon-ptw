@@ -1,5 +1,6 @@
 """asyncpg pool (lazy) + query helpers. The app boots and /health works without DATABASE_URL."""
 
+import json
 import logging
 import ssl
 from contextlib import asynccontextmanager
@@ -49,6 +50,12 @@ def _split_ssl(url: str) -> tuple[str, Any]:
     return clean, ctx
 
 
+async def _init_conn(conn: asyncpg.Connection) -> None:
+    """jsonb/json <-> Python objects (decisions, action_items, citations)."""
+    for typ in ("jsonb", "json"):
+        await conn.set_type_codec(typ, encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
+
+
 async def get_pool() -> asyncpg.Pool:
     """Create the pool on first use. Raises RuntimeError when DATABASE_URL is empty."""
     global _pool
@@ -57,7 +64,12 @@ async def get_pool() -> asyncpg.Pool:
         if not url:
             raise RuntimeError("DATABASE_URL is not set")
         clean, ssl_arg = _split_ssl(url)
-        kwargs: dict[str, Any] = {"statement_cache_size": 0, "min_size": 1, "max_size": 5}
+        kwargs: dict[str, Any] = {
+            "statement_cache_size": 0,
+            "min_size": 1,
+            "max_size": 5,
+            "init": _init_conn,
+        }
         if ssl_arg is not None:
             kwargs["ssl"] = ssl_arg
         _pool = await asyncpg.create_pool(clean, **kwargs)
@@ -134,3 +146,29 @@ async def update_meeting(meeting_id: str, **fields: Any) -> dict[str, Any] | Non
 async def insert_brief(meeting_id: str, text: str) -> None:
     pool = await get_pool()
     await pool.execute("insert into briefs (meeting_id, text) values ($1, $2)", meeting_id, text)
+
+
+# --- utterances --------------------------------------------------------------
+
+
+async def insert_utterance(
+    meeting_id: str,
+    speaker: str,
+    text: str,
+    ts_start: float,
+    ts_end: float | None = None,
+) -> dict[str, Any] | None:
+    """Insert one transcript line. Returns the row, or None when it already exists (retry)."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """insert into utterances (meeting_id, speaker, text, ts_start, ts_end)
+           values ($1, $2, $3, $4, $5)
+           on conflict (meeting_id, speaker, ts_start) do nothing
+           returning id, meeting_id, speaker, text, ts_start, ts_end""",
+        meeting_id,
+        speaker,
+        text,
+        ts_start,
+        ts_end,
+    )
+    return dict(row) if row else None
