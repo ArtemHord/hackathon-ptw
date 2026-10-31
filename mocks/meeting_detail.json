@@ -15,7 +15,9 @@
       "id": "ai_01",
       "owner": "Artem",
       "text": "Update SDK docs",
-      "due": "2026-11-03"
+      "due": "2026-11-03",
+      "jira_key": null,
+      "jira_url": null
     }
   ],
   "fact_checks": [

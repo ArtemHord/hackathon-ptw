@@ -30,6 +30,11 @@ Lista rozmów właściciela, najnowsze pierwsze. Response `200`: `{items: [{id, 
 ### GET /meetings/{id}?since=<ts>
 Szczegóły rozmowy. Bez `since`: pełny obiekt. Z `since` (sekundy od początku rozmowy, integer): tablice `utterances`, `fact_checks`, `escalations`, `agent_said` zawierają tylko elementy z `ts > since`, z wyjątkiem eskalacji, które zmieniły status od tego czasu (zwracane w całości, klucz `id`); pola skalarne (`status`, `summary`...) zawsze aktualne. Służy do odpytywania co 2 s, gdy WS nie działa. Pola `summary`, `decisions`, `action_items` są puste (`""`, `[]`) do końca podsumowania. Mock: `mocks/meeting_detail.json`.
 
+Element `action_items`: `{id, owner, text, due, jira_key, jira_url}`; `jira_key`/`jira_url` = null, dopóki nie ma zgłoszenia w Jirze. `id` jest stabilne (zapisane albo `ai_NN` wg pozycji). (Dodane M7, zmiana kontraktu.)
+
+### POST /meetings/{id}/action-items/{item_id}/jira
+Tworzy zgłoszenie w Jirze (projekt `JIRA_PROJECT_KEY`, typ Task, opis ADF) dla jednego action itemu i zapisuje klucz na itemie. Idempotentne: jeśli item ma już `jira_key`, zwraca istniejący. Request: puste ciało. Response `200`: `{jira_key: "PTW-42", url: "https://<site>.atlassian.net/browse/PTW-42"}`. Błędy: `404` nieznana rozmowa / item, `409` `not_configured` (Jira nieustawiona), `502` `upstream_error` (komunikat z Jiry). (Dodane M7, zmiana kontraktu.)
+
 ### POST /meetings/{id}/leave
 Bot wychodzi z rozmowy, backend uruchamia podsumowanie (asynchronicznie). Request: puste ciało. Response `200`: `{id, status: "done", summary_status: "processing"}`. Mock: `mocks/meeting_leave.json`.
 
@@ -81,6 +86,17 @@ Jeden WS na ekran Live. Każda wiadomość to envelope:
 
 Karta eskalacji: `escalation_created` dodaje kartę o `id` (waiting), `escalation_answered` z tym samym `id` aktualizuje ją (answered, albo timeout z `answer: null`).  Zmiany statusu rozmowy przychodzą zdarzeniem `meeting_status` (i polem `status` w `GET /meetings/{id}`).
 
+## Konfiguracja agenta i narzędzia testowe (dodane M7, web app `/ui`)
+
+Addytywne, poza ekranami mobilnymi. Auth jak wyżej (Bearer `DEMO_TOKEN`). Wartości z bazy (`app_settings`) mają pierwszeństwo przed env.
+
+- `GET /settings` → `{values: {<KEY>: {secret, value, set, hint, source}}, public_base_url}`; klucze: `AGENT_NAME, OWNER_NAME, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_AUTO_CREATE`. Sekrety nigdy nie wracają (`value: null`, `hint: "…ab12"`); `source`: `db | env | unset`.
+- `PUT /settings` — częściowy `{<KEY>: "value"}`; `""` usuwa nadpisanie (powrót do env); nieznany klucz → `422`. Odpowiedź jak `GET`.
+- `GET /integrations` → `{slack: {configured, webhook_url}, telegram: {configured, webhook_url, bot_username}, jira: {configured, base_url, project_key}}`.
+- `POST /integrations/{slack|telegram|jira}/test` → `{ok, detail}` (+ `bot_username` dla telegram; test Telegrama rejestruje też webhook, gdy ustawione `PUBLIC_BASE_URL` i sekret).
+- `GET /experts` → `{items: [{id, name, role, topics, channel: "slack"|"telegram", email, slack_user_id, telegram_chat_id, is_owner}]}`; `POST /experts` → `201`; `PUT /experts/{id}` (częściowy); `DELETE /experts/{id}` → `{id, deleted: true}`; `POST /experts/{id}/test` → `{ok, detail}`. Bez bazy zapis → `409`.
+- `POST /debug/simulate` `{speed?: 20, expert_reply?: "Thursday" | null}` → `202 {meeting_id}`; odtwarza `seed/demo_transcript.json` jako webhooki Recall; bez bazy → `409`. `/debug/*` przyjmuje Bearer `DEMO_TOKEN` albo `?token=WEBHOOK_TOKEN`.
+
 ## Poza kontraktem aplikacji (webhooki i strona agenta)
 
 `POST /webhooks/recall/transcript`, `POST /webhooks/recall/status`, `POST /webhooks/slack`, `POST /webhooks/telegram`, `GET /agent`, `WS /agent-page/ws`, `GET /health`.
@@ -96,6 +112,7 @@ Karta eskalacji: `escalation_created` dodaje kartę o `id` (waiting), `escalatio
 | 3 | Live (Ask agent) | `POST /meetings/{id}/ask` | `meeting_ask.json` |
 | 3 | Live (fallback bez WS) | `GET /meetings/{id}?since=` | `meeting_detail.json` |
 | 4 | Szczegóły rozmowy | `GET /meetings/{id}` | `meeting_detail.json` |
+| 4 | Szczegóły rozmowy (Create in Jira) | `POST /meetings/{id}/action-items/{item_id}/jira` | brak (`{jira_key, url}`) |
 | 5 | Czat z agentem | `POST /chat` | `chat.json` |
 | 5 | Czat (Odsłuchaj) | `POST /tts` | brak (audio/mpeg) |
 | 6 | Baza wiedzy | `GET /kb/docs`, `POST /kb/docs` | `kb_docs.json`, `kb_doc_create.json` |

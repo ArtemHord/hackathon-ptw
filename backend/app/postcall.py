@@ -10,7 +10,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from app import db, hub, llm, rag
+from app import db, hub, jira, llm, rag, runtime
 
 log = logging.getLogger(__name__)
 
@@ -92,16 +92,32 @@ def build_prompt(
 def merge_action_items(
     existing: list[dict[str, Any]], new: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Existing (e.g. escalation timeouts) first, then LLM ones; dedupe by text, ignoring case."""
+    """Existing (e.g. escalation timeouts) first, then LLM ones; dedupe by text, ignoring case.
+    Every item gets a stable `id` (existing: as GET /meetings/{id} exposed it; new: next free
+    ai_NN); jira_key/jira_url are kept (M7.4)."""
+    old = db.with_item_ids(existing)
+    used = {it["id"] for it in old}
     out, seen = [], set()
-    for it in [*(existing or []), *new]:
+    for it in [*old, *new]:
         if not isinstance(it, dict):
             continue
         key = " ".join(str(it.get("text", "")).split()).lower()
         if not key or key in seen:
             continue
         seen.add(key)
-        out.append({"owner": it.get("owner"), "text": it["text"], "due": it.get("due")})
+        item = {"owner": it.get("owner"), "text": it["text"], "due": it.get("due")}
+        item_id = it.get("id")
+        if not item_id:
+            n = len(out) + 1
+            while f"ai_{n:02d}" in used:
+                n += 1
+            item_id = f"ai_{n:02d}"
+        used.add(item_id)
+        item = {"id": item_id, **item}
+        for k in ("jira_key", "jira_url"):
+            if it.get(k):
+                item[k] = it[k]
+        out.append(item)
     return out
 
 
@@ -152,10 +168,14 @@ async def _run(meeting_id: str) -> None:
         log.warning("postcall: empty summary for %s", meeting_id)
         return
     decisions = [str(d) for d in out.get("decisions") or []]
-    items = merge_action_items(meeting.get("action_items") or [], out.get("action_items") or [])
+    # Re-read: an escalation timeout may have added an item (or a Jira key) during the LLM call.
+    latest = (await db.get_meeting(meeting_id)) or meeting
+    items = merge_action_items(latest.get("action_items") or [], out.get("action_items") or [])
     updated = await db.update_meeting(
         meeting_id, summary=summary, decisions=decisions, action_items=items
     )
+    if items and jira.configured() and runtime.get_bool("JIRA_AUTO_CREATE"):
+        jira.spawn(jira.auto_create(meeting_id))  # fire-and-forget, idempotent
     # HACK: facts stored with embedding null; backfilled fire-and-forget below.
     for f in out.get("facts") or []:
         try:

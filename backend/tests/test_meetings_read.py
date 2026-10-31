@@ -12,15 +12,18 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import asyncpg
+import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
 
-from app import db
+from app import db, runtime
 from app.config import get_settings
 from app.main import app
 
 MOCKS = Path(__file__).resolve().parents[2] / "mocks"
 MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "001_init.sql"
+MIGRATION_SETTINGS = Path(__file__).resolve().parents[1] / "migrations" / "002_settings.sql"
 URL = os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:pw@localhost:55443/postgres")
 # SAFETY: the fixture drops the public schema; never run against a non-local DB.
 if urlsplit(URL).hostname not in ("localhost", "127.0.0.1"):
@@ -67,6 +70,7 @@ def client(monkeypatch):
         c = await asyncpg.connect(URL)
         await c.execute("drop schema public cascade; create schema public;")
         await c.execute(MIGRATION.read_text())
+        await c.execute(MIGRATION_SETTINGS.read_text())
         t0 = datetime(2026, 10, 31, 9, 0, tzinfo=UTC)
         await c.execute(
             """insert into meetings (id,title,platform,mode,status,started_at,ended_at,summary,
@@ -174,3 +178,36 @@ def test_auth_and_404(client):
     r = client.get("/meetings/nope", headers=AUTH)
     assert r.status_code == 404
     assert r.json() == {"error": {"code": "not_found", "message": "Meeting nope not found"}}
+
+
+def test_action_item_to_jira_persists(client):
+    """M7.4: the manual endpoint against real Postgres (row-locked jsonb update), Jira mocked."""
+    jira_url = "https://acme.atlassian.net"
+    runtime._overrides.update(  # noqa: SLF001
+        {
+            "JIRA_BASE_URL": jira_url,
+            "JIRA_EMAIL": "bot@acme.io",
+            "JIRA_API_TOKEN": "jt",
+            "JIRA_PROJECT_KEY": "PTW",
+        }
+    )
+    try:
+        with respx.mock(assert_all_called=False) as rm:
+            rm.get(f"{jira_url}/rest/api/3/user/search").mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            create = rm.post(f"{jira_url}/rest/api/3/issue").mock(
+                return_value=httpx.Response(201, json={"key": "PTW-42"})
+            )
+            first = client.post("/meetings/m_01/action-items/ai_01/jira", headers=AUTH)
+            again = client.post("/meetings/m_01/action-items/ai_01/jira", headers=AUTH)
+            missing = client.post("/meetings/m_01/action-items/ai_09/jira", headers=AUTH)
+        want = {"jira_key": "PTW-42", "url": f"{jira_url}/browse/PTW-42"}
+        assert first.json() == want and again.json() == want
+        assert missing.status_code == 404
+        assert create.call_count == 1
+        (item,) = client.get("/meetings/m_01", headers=AUTH).json()["action_items"]
+        assert (item["id"], item["jira_key"]) == ("ai_01", "PTW-42")
+        assert item["text"] == "Update SDK docs" and item["due"] == "2026-11-03"
+    finally:
+        runtime.reset()

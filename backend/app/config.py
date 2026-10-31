@@ -3,6 +3,12 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def keyterms_for(name: str, extra: str = "") -> list[str]:
+    """The wake word, its common openers, then comma-separated extras."""
+    more = [t.strip() for t in extra.split(",") if t.strip()]
+    return [name, f"Hey {name}", f"Okay {name}", *more]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
@@ -23,15 +29,19 @@ class Settings(BaseSettings):
     DEMO_TOKEN: str = ""
     WEBHOOK_TOKEN: str = ""
     AGENT_NAME: str = "Atlas"  # wake word + bot display name (M6.3)
+    OWNER_NAME: str = "Artem"  # whose delegate the agent is (bot name, system prompt)
+    JIRA_BASE_URL: str = ""  # https://<site>.atlassian.net
+    JIRA_EMAIL: str = ""
+    JIRA_API_TOKEN: str = ""
+    JIRA_PROJECT_KEY: str = ""
+    JIRA_AUTO_CREATE: str = ""  # truthy "1/true/yes": post-call action items -> Jira issues
     TRANSCRIPT_PROVIDER: str = "recallai"  # recallai | deepgram (M6.6, decision 28)
     TRANSCRIPT_EXTRA_KEYTERMS: str = ""  # comma-separated aliases appended to the keyterms
 
     @property
     def transcript_keyterms(self) -> list[str]:
         """Deepgram nova-3 keyterm boost: the wake word, its common openers, then extras."""
-        n = self.AGENT_NAME
-        extra = [t.strip() for t in self.TRANSCRIPT_EXTRA_KEYTERMS.split(",") if t.strip()]
-        return [n, f"Hey {n}", f"Okay {n}", *extra]
+        return keyterms_for(self.AGENT_NAME, self.TRANSCRIPT_EXTRA_KEYTERMS)
 
     CORS_ORIGINS: str = "*"  # comma-separated origins for the app / web client
 

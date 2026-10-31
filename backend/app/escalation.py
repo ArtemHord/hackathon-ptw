@@ -12,11 +12,12 @@ import asyncio
 import json
 import logging
 import re
+import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, hub, recall, speech
+from app import agent_voice, db, hub, jira, recall, runtime, speech
 from app.config import get_settings
 from app.notifier.base import Expert, SentMessage, get_notifier
 
@@ -88,19 +89,22 @@ async def load_experts(refresh: bool = False) -> list[Expert]:
 
 
 async def seed_experts() -> None:
-    """HACK: upsert seed/experts.json at startup, only when DATABASE_URL is set."""
+    """HACK: seed/experts.json at startup, only with DATABASE_URL and an empty experts table
+    (experts are edited in the web UI since M7.1; reseeding would overwrite those edits)."""
     if not get_settings().DATABASE_URL:
         return
     try:
-        await db.upsert_experts(json.loads(SEED_PATH.read_text())["experts"])
+        if await db.count_experts() == 0:
+            await db.upsert_experts(json.loads(SEED_PATH.read_text())["experts"])
         await load_experts(refresh=True)
     except Exception as e:
         log.warning("expert seed failed: %s", e)
 
 
 def _notifier_for(channel: str):
-    """HACK: without SLACK_BOT_TOKEN, slack experts go to the fake notifier (offline demo/tests)."""
-    if channel == "slack" and not get_settings().SLACK_BOT_TOKEN:
+    """HACK: without the channel's bot token, experts go to the fake notifier (offline demo)."""
+    token = {"slack": "SLACK_BOT_TOKEN", "telegram": "TELEGRAM_BOT_TOKEN"}.get(channel)
+    if token and not runtime.get(token):
         from app.notifier import fake  # noqa: F401  registers "fake"
 
         return get_notifier("fake")
@@ -250,10 +254,17 @@ async def _timeout(meeting_id: str, esc_id: str, expert: str, question: str) -> 
             ts = float(row.get("ts") or 0) + _elapsed_s(row.get("asked_at"))
             line = f"{name} hasn't answered yet — I've added it to follow-ups."
             await _speak(meeting_id, line, esc_id, ts, False, None)
-        await _try(
-            db.append_action_item(meeting_id, {"owner": name, "text": question, "due": None}),
-            "append action item",
-        )
+        item: dict[str, Any] = {"owner": name, "text": question, "due": None}
+        follow_up = jira.configured() and bool(jira.project_key())
+        if follow_up:
+            item = {"id": f"ai_{secrets.token_hex(4)}", **item}
+        await _try(db.append_action_item(meeting_id, item), "append action item")
+        if follow_up:  # M7.4: Jira follow-up in the background, the spoken line is already out
+            jira.spawn(
+                jira.followup_for_timeout(
+                    meeting_id, item["id"], question, str(row.get("asked_by") or "someone"), name
+                )
+            )
         await _try(
             hub.publish(meeting_id, "escalation_answered", public(row, name)), "publish timeout"
         )

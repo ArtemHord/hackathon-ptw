@@ -1,15 +1,27 @@
-"""HACK: debug endpoints to drive the escalation loop without Slack. Not in API.pl.md."""
+"""HACK: debug endpoints to drive the escalation loop without Slack. Not in API.pl.md.
+
+Auth: `?token=WEBHOOK_TOKEN` (scripts) or `Authorization: Bearer DEMO_TOKEN` (web UI).
+"""
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 
-from app import db, escalation, orchestrator
-from app.meetings import error_response
-from app.webhooks_recall import _spawn, _token_ok, is_bot_speaker
+from app import db, escalation, orchestrator, simulate
+from app.config import get_settings
+from app.meetings import ApiError, demo_token_ok, error_response
+from app.webhooks_recall import _spawn, _token_ok
 
-router = APIRouter(prefix="/debug")
+
+async def require_debug_token(
+    token: str | None = None, authorization: str | None = Header(default=None)
+) -> None:
+    if not (_token_ok(token) or demo_token_ok(authorization)):
+        raise ApiError(401, "unauthorized", "Missing or invalid token")
+
+
+router = APIRouter(prefix="/debug", dependencies=[Depends(require_debug_token)])
 
 
 class AskBody(BaseModel):
@@ -21,10 +33,13 @@ class ExpertReply(BaseModel):
     text: str
 
 
+class SimulateBody(BaseModel):
+    speed: float = simulate.DEFAULT_SPEED
+    expert_reply: str | None = simulate.DEFAULT_REPLY
+
+
 @router.post("/expert-reply")
-async def expert_reply(body: ExpertReply, token: str | None = None) -> Any:
-    if not _token_ok(token):
-        return error_response(401, "unauthorized", "Missing or invalid token")
+async def expert_reply(body: ExpertReply) -> Any:
     esc = await db.get_escalation(body.escalation_id)
     if esc is None:
         return error_response(404, "not_found", "Unknown escalation")
@@ -37,37 +52,32 @@ async def expert_reply(body: ExpertReply, token: str | None = None) -> Any:
 
 
 @router.get("/escalations")
-async def list_escalations(meeting_id: str | None = None, token: str | None = None) -> Any:
-    if not _token_ok(token):
-        return error_response(401, "unauthorized", "Missing or invalid token")
+async def list_escalations(meeting_id: str | None = None) -> Any:
     rows = await db.list_escalations(meeting_id)
     return [{"id": str(r["id"]), "status": r["status"], "expert": r.get("expert")} for r in rows]
 
 
 @router.post("/ask")
-async def ask(meeting_id: str, token: str | None = None, body: AskBody | None = None) -> Any:
+async def ask(meeting_id: str, body: AskBody | None = None) -> Any:
     """HACK (M6.3): stage backup trigger when the ASR mangles the wake word. Runs the answer flow
     on body.text, or on the latest human utterance of the meeting. No wake-word check;
     the speaking / busy / delegate-mode guards still apply (inside orchestrator.ask)."""
-    if not _token_ok(token):
-        return error_response(401, "unauthorized", "Missing or invalid token")
-    last = [
-        u
-        for u in await db.get_last_utterances(meeting_id, 10)
-        if not is_bot_speaker(str(u.get("speaker") or ""))
-    ]
-    latest = last[-1] if last else None
-    text = ((body.text if body else None) or "").strip()
-    if not text:
-        if latest is None:
-            return error_response(404, "not_found", "No utterance to answer")
-        text = str(latest.get("text") or "").strip()
-    question = orchestrator.parse_trigger(text) or text
-    utterance = {
-        "id": latest.get("id") if latest else None,
-        "speaker": (latest or {}).get("speaker") or "Someone",
-        "text": text,
-        "ts": int(float((latest or {}).get("ts_start") or 0.0)),
-    }
+    asked = await orchestrator.manual_question(meeting_id, body.text if body else None)
+    if asked is None:
+        return error_response(404, "not_found", "No utterance to answer")
+    utterance, question = asked
     _spawn(orchestrator.ask(meeting_id, utterance, question))  # 200 now, voice follows
     return {"ok": True, "question": question}
+
+
+@router.post("/simulate", status_code=202)
+async def simulate_call(body: SimulateBody | None = None) -> Any:
+    """Replay the demo transcript as Recall webhooks to ourselves (no Recall, no real call)."""
+    if not get_settings().DATABASE_URL:
+        raise ApiError(409, "conflict", "Simulation needs a database")
+    if not get_settings().WEBHOOK_TOKEN:
+        raise ApiError(409, "conflict", "Simulation needs WEBHOOK_TOKEN")
+    body = body or SimulateBody()
+    speed = min(max(body.speed, 0.5), 200.0)
+    meeting_id = await simulate.run(speed=speed, expert_reply=body.expert_reply)
+    return {"meeting_id": meeting_id}
