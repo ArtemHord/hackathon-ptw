@@ -27,6 +27,7 @@ from app.main import app
 ROOT = Path(__file__).resolve().parents[2]
 MOCKS = ROOT / "mocks"
 MIGRATION = ROOT / "backend" / "migrations" / "001_init.sql"
+MIGRATION_SETTINGS = ROOT / "backend" / "migrations" / "002_settings.sql"
 FIXTURE = ROOT / "backend" / "seed" / "demo_transcript.json"
 URL = os.environ.get("E2E_DATABASE_URL", "postgresql://postgres:pw@localhost:55450/postgres")
 # SAFETY: the fixture drops the public schema; never run against a non-local DB.
@@ -113,6 +114,7 @@ def world(monkeypatch):
         c = await asyncpg.connect(URL)
         await c.execute("drop schema public cascade; create schema public;")
         await c.execute(MIGRATION.read_text())
+        await c.execute(MIGRATION_SETTINGS.read_text())
         await c.execute(
             """insert into meetings (id,title,platform,mode,status,recall_bot_id,started_at)
                values ($1,'E2E stand-up','google_meet','delegate','joining',$2, now())""",

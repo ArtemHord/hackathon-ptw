@@ -6,7 +6,6 @@ confidence, needs_expert, topic} -> filler if slow -> say() -> agent_said row + 
 """
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -14,14 +13,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, escalation, hub, llm, speech
-from app.config import get_settings
+from app import agent_voice, db, escalation, hub, jira, llm, runtime, speech
 
 log = logging.getLogger(__name__)
 
 FILLER_AFTER_S = 1.5
 CONTEXT_WINDOW_S = 120.0
 MIN_CONFIDENCE = 0.6
+JIRA_LOOKUP_S = 2.5  # overall cap on the in-call ticket lookup (M7.4)
+JIRA_MAX_KEYS = 2
 SEED_DIR = Path(__file__).resolve().parent.parent / "seed"
 
 # Wake word (M6.3): AGENT_NAME ("Atlas") as a whole word within the first WAKE_MAX_WORDS
@@ -52,7 +52,7 @@ def _now() -> float:
 
 def wake_aliases(name: str | None = None) -> tuple[str, ...]:
     """Every alias, the one place they are built: name, hey/okay/ok name, ASR spellings."""
-    n = (name or get_settings().AGENT_NAME).strip().lower()
+    n = (name or runtime.get("AGENT_NAME")).strip().lower()
     return (f"hey {n}", f"okay {n}", f"ok {n}", n, *_ALIAS_EXTRA.get(n, ()))
 
 
@@ -82,13 +82,13 @@ ANSWER_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-# HACK: owner name "Artem" hardcoded for the demo.
-SYSTEM_PROMPT = """You are {agent}, Artem's delegate in this call.
+# Owner and agent names come from runtime settings (web UI, env fallback).
+SYSTEM_PROMPT = """You are {agent}, {owner}'s delegate in this call.
 People in the call address you as "{agent}". Your words are spoken aloud in the call.
 
 Rules:
 - The question comes from noisy live speech recognition: interpret it charitably using the \
-brief and the documents ("what the tartan finish" = "what did Artem finish"). If it is \
+brief and the documents ("what the tartan finish" = "what did {owner} finish"). If it is \
 still unclear what was asked, reply with ONE short clarifying question.
 - Answer ONLY from the context below: the owner's brief, the company documents and the \
 recent transcript. Never guess or invent facts.
@@ -100,6 +100,9 @@ needs_expert=true and topic="owner".
 matching expert topic from the list below (or "owner" if none fits).
 - confidence: 0-1, how sure you are the answer is fully supported by the context.
 - topic: "" when needs_expert is false.
+- If a "## Jira" section is in the user message, answer the ticket question from it: \
+status, assignee and due date, briefly. If it says a ticket was not found, say so; that \
+alone is not a reason to set needs_expert.
 
 ## Owner's brief
 {brief}
@@ -127,7 +130,7 @@ async def on_needs_expert(
 def match_trigger(text: str) -> tuple[str | None, str]:
     """(question, reason). Question is the text after the wake word, or None + why not."""
     text = (text or "").replace("\u2019", "'")
-    anywhere, start = _wake_res(get_settings().AGENT_NAME.strip().lower())
+    anywhere, start = _wake_res(runtime.get("AGENT_NAME").strip().lower())
     m = start.match(text) if start else None
     if m is None:
         m = anywhere.search(text)
@@ -156,34 +159,71 @@ def seed_docs() -> str:
     return _docs_cache
 
 
-def experts_text() -> str:
+async def experts_text() -> str:
+    """Expert list for the prompt, from escalation.load_experts() (DB when configured, seed
+    file otherwise). Cached; experts CRUD (settings_api) resets _experts_cache."""
     global _experts_cache
     if _experts_cache is None:
-        try:
-            data = json.loads((SEED_DIR / "experts.json").read_text())
-            lines = [
-                f"- {e['name']}: {', '.join(e.get('topics') or [])}"
-                for e in data.get("experts", [])
-            ]
-        except (OSError, ValueError, KeyError, TypeError) as e:
-            log.warning("experts.json unreadable: %s", e)
-            lines = []
+        experts = await escalation.load_experts()
+        lines = [f"- {e.name}: {', '.join(e.topics or [])}" for e in experts]
         _experts_cache = "\n".join(lines) or "(none)"
     return _experts_cache
 
 
 def build_messages(
-    brief: str, recent: list[dict[str, Any]], speaker: str, question: str
+    brief: str,
+    recent: list[dict[str, Any]],
+    speaker: str,
+    question: str,
+    experts: str = "(none)",
+    jira_issues: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
     system = SYSTEM_PROMPT.format(
-        agent=get_settings().AGENT_NAME,
+        agent=runtime.get("AGENT_NAME"),
+        owner=runtime.get("OWNER_NAME"),
         brief=brief.strip() or "(no brief)",
-        experts=experts_text(),
+        experts=experts,
         docs=seed_docs(),
     )
     transcript = "\n".join(f"{u['speaker']}: {u['text']}" for u in recent) or "(empty)"
     user = f"Recent transcript (last 2 minutes):\n{transcript}\n\n{speaker} asks you: {question}"
+    if jira_issues:
+        user += "\n\n## Jira\n" + "\n\n".join(jira_section(i) for i in jira_issues)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def jira_section(issue: dict[str, Any]) -> str:
+    """One ticket for the prompt; {"key", "not_found": True} for a missing one."""
+    if issue.get("not_found"):
+        return f"{issue['key']}: not found in Jira."
+    lines = [
+        f"{issue['key']}: {issue.get('summary') or '(no summary)'}",
+        f"Status: {issue.get('status') or 'unknown'}",
+        f"Assignee: {issue.get('assignee') or 'unassigned'}",
+        f"Due: {issue.get('due') or 'no due date'}",
+    ]
+    if issue.get("description"):
+        lines.append(f"Description: {issue['description']}")
+    return "\n".join(lines)
+
+
+async def jira_context(question: str) -> list[dict[str, Any]]:
+    """Tickets named in the question (max JIRA_MAX_KEYS, fetched concurrently, JIRA_LOOKUP_S
+    overall). [] when Jira isn't configured, no key is found or the lookup fails. Never raises."""
+    if not jira.configured():
+        return []
+    keys = jira.extract_keys(question, jira.project_key())[:JIRA_MAX_KEYS]
+    if not keys:
+        return []
+    try:
+        found = await asyncio.wait_for(
+            asyncio.gather(*(jira.get_issue(k) for k in keys)), JIRA_LOOKUP_S
+        )
+    except Exception as e:
+        log.warning("jira lookup %s failed, answering without it: %r", keys, e)
+        return []
+    log.info("jira lookup %s: %d found", keys, sum(1 for i in found if i))
+    return [i or {"key": k, "not_found": True} for k, i in zip(keys, found, strict=True)]
 
 
 def _normalize(raw: dict[str, Any]) -> dict[str, Any]:
@@ -287,6 +327,37 @@ def _armed_question(key: tuple[str, str], text: str) -> str | None:
     return question
 
 
+def is_busy(meeting_id: str) -> bool:
+    """An answer is in progress or the agent is speaking (POST /meetings/{id}/ask -> 409)."""
+    return meeting_id in _busy or agent_voice.is_speaking(meeting_id)
+
+
+async def manual_question(meeting_id: str, text: str | None) -> tuple[dict[str, Any], str] | None:
+    """(utterance, question) for a button trigger (POST /meetings/{id}/ask, /debug/ask): the
+    given text, or the latest human utterance. None if there is nothing to answer."""
+    from app.webhooks_recall import is_bot_speaker  # lazy: webhooks_recall -> orchestrator
+
+    last = [
+        u
+        for u in await db.get_last_utterances(meeting_id, 10)
+        if not is_bot_speaker(str(u.get("speaker") or ""))
+    ]
+    latest = last[-1] if last else None
+    text = (text or "").strip()
+    if not text:
+        if latest is None:
+            return None
+        text = str(latest.get("text") or "").strip()
+    question = parse_trigger(text) or text
+    utterance = {
+        "id": latest.get("id") if latest else None,
+        "speaker": (latest or {}).get("speaker") or "Someone",
+        "text": text,
+        "ts": int(float((latest or {}).get("ts_start") or 0.0)),
+    }
+    return utterance, question
+
+
 async def ask(meeting_id: str, utterance: dict[str, Any], question: str) -> bool:
     """Answer flow without the wake-word check (also POST /debug/ask). Keeps the speaking,
     busy and delegate-mode guards. False if dropped by a guard or failed. Never raises."""
@@ -323,19 +394,27 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
     asked_by = str(utterance.get("speaker") or "Someone")
     call_ts = float(utterance.get("ts") or 0.0)
 
-    brief, recent = await asyncio.gather(
+    context = asyncio.gather(
         _safe(db.get_brief(meeting_id), ""),
         _safe(db.get_recent_utterances(meeting_id, call_ts - CONTEXT_WINDOW_S), []),
+        _safe(experts_text(), "(none)"),
+        _safe(jira_context(question), []),  # [] unless Jira is set up and a key was said
     )
-    messages = build_messages(brief, recent, asked_by, question)
-    task = asyncio.create_task(llm.chat_json(messages, "agent_answer", ANSWER_SCHEMA))
-
     filler = False
-    wait_s = max(0.0, FILLER_AFTER_S - (time.monotonic() - t0))
-    done, _ = await asyncio.wait({task}, timeout=wait_s)
-    if not done:
+    done, _ = await asyncio.wait({context}, timeout=FILLER_AFTER_S)
+    if not done:  # slow context (a Jira lookup): the filler covers it
         filler = True
         await speech.say_filler(meeting_id)
+    brief, recent, experts, issues = await context
+    messages = build_messages(brief, recent, asked_by, question, experts, issues)
+    task = asyncio.create_task(llm.chat_json(messages, "agent_answer", ANSWER_SCHEMA))
+
+    if not filler:
+        wait_s = max(0.0, FILLER_AFTER_S - (time.monotonic() - t0))
+        done, _ = await asyncio.wait({task}, timeout=wait_s)
+        if not done:
+            filler = True
+            await speech.say_filler(meeting_id)
     try:
         result = _normalize(await task)
     except Exception as e:

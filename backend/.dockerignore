@@ -6,3 +6,5 @@ __pycache__
 tests/
 **/.env
 **/.env.*
+web/node_modules
+web/dist

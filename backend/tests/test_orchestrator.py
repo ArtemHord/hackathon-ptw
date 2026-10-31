@@ -7,7 +7,7 @@ import httpx
 import pytest
 import respx
 
-from app import agent_voice, db, hub, llm, orchestrator, speech, webhooks_recall
+from app import agent_voice, db, escalation, hub, llm, orchestrator, speech, webhooks_recall
 from app.config import get_settings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +27,8 @@ def env(monkeypatch):
     llm._client = None
     orchestrator._busy.clear()
     orchestrator._armed.clear()
+    monkeypatch.setattr(orchestrator, "_experts_cache", None)  # expert list from the seed file
+    monkeypatch.setattr(escalation, "_cache", None)
     orchestrator._pending.clear()
     yield
     for _, _, timer in orchestrator._pending.values():

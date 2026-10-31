@@ -17,8 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import escalation
-from app.config import get_settings
+from app import escalation, runtime
 from app.meetings import error_response
 from app.notifier.slack import SLACK
 
@@ -46,7 +45,7 @@ def reset() -> None:
 
 
 def verify_signature(body: bytes, timestamp: str | None, signature: str | None) -> bool:
-    secret = get_settings().SLACK_SIGNING_SECRET
+    secret = runtime.get("SLACK_SIGNING_SECRET")
     if not secret or not timestamp or not signature:
         return False
     try:

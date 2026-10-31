@@ -57,10 +57,18 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M6.6 Deepgram nova-3 transcription + keyterm "Atlas" (TRANSCRIPT_PROVIDER env, fallback to recallai on 400) (senior-developer)
 - [x] M2.5c Sharpen orb (offscreen blur buffers 220/440 px → looks 240p in Meet)
 - [x] M6.3b Deepgram spells "Atlas" correctly → no alias top-up; instead partial-question merge (2.5 s) + endpointing 500
-- [ ] M6.4 (after M3.5 passes) `POST /meetings/{id}/ask` app endpoint (contract change approved 05:10; API.pl.md + mock done by orchestrator)
+- [x] M6.4 `POST /meetings/{id}/ask` app endpoint (done in M7.1)
 - [ ] M6.5 (after M3.5 passes) Redact `token=` in uvicorn WS log lines (token leaked to Railway logs → rotate WEBHOOK_TOKEN)
 - [x] M6.1 `/app/ws` all events (e2e test, real DB), tokens, CORS
 - [ ] M6.2 3 runs of the 90-s scenario on real Meet, latency measured, backup video by 09:30
+
+### M7 · Web setup app + integrations (branch `web-ui-integrations`, PR)
+- [x] M7.1 Runtime settings in DB (`app_settings`, `app/runtime.py`, env fallback), experts CRUD, `/integrations/*/test`, `/debug/simulate`, `/meetings/{id}/ask`
+- [x] M7.2 Web app (React + Vite + shadcn) at `/ui`, multi-stage Dockerfile
+- [x] M7.3 Telegram escalation adapter + `/webhooks/telegram` + deep-link expert linking
+- [x] M7.4 Jira: in-call ticket lookup, action items → issues (button + `JIRA_AUTO_CREATE`), escalation timeout → issue
+- [x] M7.5 Verifier fixes: simulate waits for the agent (speed 20 dropped wake-word lines) and keeps the call open for a manual expert reply; expert role null -> ""
+- [ ] M7.6 HUMAN: `migrate.py` on Supabase (002), keys via `/ui` → Integrations, live Telegram + Jira check
 
 ## Research
 - [x] R1 SPEC "Do weryfikacji" blocking M1–M3 → `docs/decisions.md` (Recall output_media+recording_config, meeting chat endpoint, bot status events; Slack url_verification + signature)

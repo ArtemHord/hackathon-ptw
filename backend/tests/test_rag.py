@@ -22,6 +22,7 @@ from app.main import app
 
 MOCKS = Path(__file__).resolve().parents[2] / "mocks"
 MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "001_init.sql"
+MIGRATION_SETTINGS = Path(__file__).resolve().parents[1] / "migrations" / "002_settings.sql"
 URL = os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:pw@localhost:55445/postgres")
 AUTH = {"Authorization": "Bearer demo-t"}
 EMB_URL = "https://api.openai.com/v1/embeddings"
@@ -97,6 +98,7 @@ def client(monkeypatch):
         c = await asyncpg.connect(URL)
         await c.execute("drop schema public cascade; create schema public;")
         await c.execute(MIGRATION.read_text())
+        await c.execute(MIGRATION_SETTINGS.read_text())
         await c.close()
 
     asyncio.run(reset())
