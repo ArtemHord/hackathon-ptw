@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M1
-- In progress: M1.1 Recall client + POST /meetings, /leave (senior-developer)
+- In progress: M1.2 transcript webhook + /app/ws hub (senior-developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -18,7 +18,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M0.3 Migrations `001_init.sql` (all tables + `vector`) + `scripts/migrate.py` (idempotent; Supabase Session pooler 5432)
 
 ### M1 · Agent in the call (target 04:30)
-- [ ] M1.1 Recall client, `POST /meetings`, `POST /meetings/{id}/leave`; bot joins Google Meet
+- [x] M1.1 Recall client, `POST /meetings`, `POST /meetings/{id}/leave`; bot joins Google Meet
 - [ ] M1.2 Transcript webhook → `utterances`, dedup, WS event
 - [ ] M1.3 Bot status webhook
 - [ ] M1.4 `scripts/simulate_meeting.py` + demo-scenario fixture
@@ -64,9 +64,10 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [ ] Recall.ai API key (eu-central-1)
 - [ ] Slack app (SPEC "Konfiguracja Slack app"); Request URL after M3.2 is deployed
 - [ ] ElevenLabs voice id + OpenAI key
-- Live checks pending: Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
+- Live checks pending: Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:13 · M1.1 · Recall create/leave, Bearer auth, lazy DB pool; 18 tests, db.py checked on real pg · c30cb1d
 - 03:08 · M0 verify · 6/6 PASS (pytest, ruff, /health, docker PORT=9000, migrate ×2, mocks) · contract frozen
 - 03:08 · M0.3 · schema 13 tables + agent_said, migrate ×2 on docker pgvector ok, pytest 6 · a654c75
 - 03:06 · M0.4 · docker build+run PORT=9000 → /health ok, image 482MB · 1b26525
