@@ -62,13 +62,17 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M6.1 `/app/ws` all events (e2e test, real DB), tokens, CORS
 - [ ] M6.2 3 runs of the 90-s scenario on real Meet, latency measured, backup video by 09:30
 
-### M7 · Web setup app + integrations (branch `web-ui-integrations`, PR)
+### M7 · Web setup app + integrations (Julian, PR #1 — MERGED 07:16)
 - [x] M7.1 Runtime settings in DB (`app_settings`, `app/runtime.py`, env fallback), experts CRUD, `/integrations/*/test`, `/debug/simulate`, `/meetings/{id}/ask`
 - [x] M7.2 Web app (React + Vite + shadcn) at `/ui`, multi-stage Dockerfile
 - [x] M7.3 Telegram escalation adapter + `/webhooks/telegram` + deep-link expert linking
 - [x] M7.4 Jira: in-call ticket lookup, action items → issues (button + `JIRA_AUTO_CREATE`), escalation timeout → issue
 - [x] M7.5 Verifier fixes: simulate waits for the agent (speed 20 dropped wake-word lines) and keeps the call open for a manual expert reply; expert role null -> ""
-- [ ] M7.6 HUMAN: `migrate.py` on Supabase (002), keys via `/ui` → Integrations, live Telegram + Jira check
+- [ ] M7.6 HUMAN (also: Dima email via /ui → Experts, seed only fills an empty table): `migrate.py` on Supabase (002), keys via `/ui` → Integrations, live Telegram + Jira check
+
+### M8 · Agent tools (Artem 07:05) — feature freeze 08:30
+- [ ] M8.1 Tool calling via Responses API: `web_search` + `search_knowledge` + `create_doc` (new docs only), 9 s cap, fallback to chat_json; internal questions still escalate (senior-developer, worktree ../hackathon-ptw-m8)
+- [ ] M8.2 Live test: web question + doc request + Postgres 17 escalation (Artem)
 
 ## Research
 - [x] R1 SPEC "Do weryfikacji" blocking M1–M3 → `docs/decisions.md` (Recall output_media+recording_config, meeting chat endpoint, bot status events; Slack url_verification + signature)
@@ -96,6 +100,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 07:16 · PR #1 · merged on GitHub (b6af7fc); local main merged, 308 tests + ruff green · pushed
 - 07:15 · PR #1 review · no blockers; 308 tests, ruff, docker build OK; starts without migration 002 (env fallback); contract changes additive (action_items jira_key/jira_url, /settings, /integrations, /experts, action-item→Jira) → needs Artem OK · —
 - 07:10 · M8.1 · tool calling (web_search + search_knowledge + create_doc) → senior-developer in worktree ../hackathon-ptw-m8 (branch m8-agent-tools on PR #1 tip); PR #1 (Julian, M7 /ui + Telegram + Jira) → reviewer · —
 - 07:05 · M7 · Artem: add tool calling (web search, research, docs creation) for Atlas; researcher on OpenAI Responses web_search; Julian email unread (Chrome extension not connected) · —
