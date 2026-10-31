@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = ""
     DEMO_TOKEN: str = ""
     WEBHOOK_TOKEN: str = ""
+    CORS_ORIGINS: str = "*"  # comma-separated origins for the app / web client
 
 
 @lru_cache

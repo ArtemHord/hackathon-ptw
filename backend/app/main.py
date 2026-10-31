@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app import (
     agent_voice,
@@ -19,6 +20,7 @@ from app import (
     webhooks_recall,
     webhooks_slack,
 )
+from app.config import get_settings
 from app.notifier import slack as _slack  # noqa: F401  registers the "slack" notifier
 
 # app.* INFO lines (e.g. the orchestrator latency log) are invisible under uvicorn otherwise.
@@ -38,6 +40,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Call Crew", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in get_settings().CORS_ORIGINS.split(",") if o.strip()] or ["*"],
+    allow_credentials=False,  # auth is a Bearer header, not cookies
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 meetings.install_error_handlers(app)
 app.include_router(meetings.router)
 app.include_router(webhooks_recall.router)
