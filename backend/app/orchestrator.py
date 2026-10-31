@@ -30,7 +30,7 @@ from app import (
 
 log = logging.getLogger(__name__)
 
-FILLER_AFTER_S = 1.5
+FILLER_AFTER_S = 3.0  # filler only on slow answers (tools, escalation); orb "thinking" covers the rest
 CONTEXT_WINDOW_S = 120.0
 MIN_CONFIDENCE = 0.6
 JIRA_LOOKUP_S = 2.5  # overall cap on the in-call ticket lookup (M7.4)
