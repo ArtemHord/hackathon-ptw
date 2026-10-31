@@ -152,3 +152,15 @@ async def test_plain_dm_answers_open_question(monkeypatch):
         "text": "Yes, done on Friday",
         "user": "U_ART",
     }
+
+
+@respx.mock
+async def test_slack_person_still_asks_when_saving_fails(monkeypatch):
+    members_route()
+
+    async def boom(_user):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(escalation, "_remember_person", boom)
+    e = await escalation.slack_person("Jacob", "ping Jacob about the deploy")
+    assert e is not None and e.slack_user_id == "U_JAC" and e.id is None

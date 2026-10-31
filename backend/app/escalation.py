@@ -109,7 +109,17 @@ async def slack_person(topic: str, question: str) -> Expert | None:
             return None
         if user:
             log.info("ask-by-name %r -> slack %s (%s)", name, user["name"], user["id"])
-            return await _remember_person(user)
+            try:
+                return await _remember_person(user)
+            except Exception:
+                log.exception("could not save %s as an expert; asking anyway", user["name"])
+                return Expert(
+                    name=user["name"],
+                    role="Slack workspace member",
+                    topics=[],
+                    channel="slack",
+                    slack_user_id=user["id"],
+                )
     log.info("ask-by-name: nobody in the workspace matches %s", names)
     return None
 
