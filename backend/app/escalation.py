@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app import db, hub, recall, speech
+from app import agent_voice, db, hub, recall, speech
 from app.config import get_settings
 from app.notifier.base import Expert, SentMessage, get_notifier
 
@@ -149,6 +149,14 @@ def _elapsed_s(since: datetime | None) -> float:
     return max(0.0, (datetime.now(UTC) - since).total_seconds())
 
 
+async def _orb(coro) -> None:
+    """Orb visuals are best effort: bounded, never raises, never blocks the voice path."""
+    try:
+        await asyncio.wait_for(coro, 0.3)
+    except Exception as e:
+        log.info("orb signal failed: %s", e.__class__.__name__)
+
+
 async def start(meeting_id: str, question: str, topic: str, asked_by: str) -> dict[str, Any] | None:
     """Orchestrator hook. Returns {"expert", "escalation_id"} before any Slack I/O; None if the
     escalation could not be recorded. Never raises."""
@@ -175,6 +183,9 @@ async def start(meeting_id: str, question: str, topic: str, asked_by: str) -> di
     esc_id = row["id"]
     await _try(
         hub.publish(meeting_id, "escalation_created", public(row, expert.name)), "publish created"
+    )
+    await _orb(
+        agent_voice.send_ask(meeting_id, esc_id, question, expert.name, ESCALATION_TIMEOUT_S)
     )
     context = [f"{u['speaker']}: {u['text']}" for u in recent][-CONTEXT_LINES:]
     _spawn(_deliver(esc_id, expert, meeting.get("title") or "", asked_by, question, context))
@@ -233,6 +244,7 @@ async def _timeout(meeting_id: str, esc_id: str, expert: str, question: str) -> 
         if row is None:
             return  # answered in time
         name = row.get("expert") or expert
+        await _orb(agent_voice.send_ask_done(meeting_id, esc_id, "timeout"))
         meeting = await _try(db.get_meeting(meeting_id), "get_meeting") or {}
         if meeting.get("status") in LIVE_STATUSES:
             ts = float(row.get("ts") or 0) + _elapsed_s(row.get("asked_at"))
@@ -286,6 +298,7 @@ async def _on_reply(channel_id: str, thread_ts: str, text: str, user_id: str) ->
     meeting = await _try(db.get_meeting(meeting_id), "get_meeting") or {}
     live = meeting.get("status") in LIVE_STATUSES
     if live and not late:
+        await _orb(agent_voice.send_ask_done(meeting_id, esc_id, "answered"))
         line = f"{expert} says: {text}"
         await _speak(meeting_id, line, esc_id, answered_ts, True, meeting.get("recall_bot_id"))
         await _try(

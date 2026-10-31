@@ -167,10 +167,19 @@ async def handle(meeting_id: str, utterance: dict[str, Any]) -> None:
         log.exception("orchestrator failed for meeting %s", meeting_id)
 
 
+async def _orb(coro) -> None:
+    """Orb visuals are best effort: bounded, never raises, never blocks the voice path."""
+    try:
+        await asyncio.wait_for(coro, 0.3)
+    except Exception as e:
+        log.info("orb signal failed: %s", e.__class__.__name__)
+
+
 async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> None:
     t0 = time.monotonic()
     if await db.get_meeting_mode(meeting_id) != "delegate":
         return  # notetaker: listen only
+    await _orb(agent_voice.send_state(meeting_id, "thinking"))
     asked_by = str(utterance.get("speaker") or "Someone")
     call_ts = float(utterance.get("ts") or 0.0)
 
@@ -191,6 +200,7 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
         result = _normalize(await task)
     except Exception as e:
         log.warning("crew LLM failed in %s, staying silent: %s", meeting_id, e)
+        await _orb(agent_voice.send_state(meeting_id, "idle"))
         return
     t_llm = time.monotonic()
 
