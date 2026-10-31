@@ -67,7 +67,8 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M7.2 Web app (React + Vite + shadcn) at `/ui`, multi-stage Dockerfile
 - [x] M7.3 Telegram escalation adapter + `/webhooks/telegram` + deep-link expert linking
 - [x] M7.4 Jira: in-call ticket lookup, action items → issues (button + `JIRA_AUTO_CREATE`), escalation timeout → issue
-- [ ] M7.5 HUMAN: `migrate.py` on Supabase (002), keys via `/ui` → Integrations, live Telegram + Jira check
+- [x] M7.5 Verifier fixes: simulate waits for the agent (speed 20 dropped wake-word lines) and keeps the call open for a manual expert reply; expert role null -> ""
+- [ ] M7.6 HUMAN: `migrate.py` on Supabase (002), keys via `/ui` → Integrations, live Telegram + Jira check
 
 ## Research
 - [x] R1 SPEC "Do weryfikacji" blocking M1–M3 → `docs/decisions.md` (Recall output_media+recording_config, meeting chat endpoint, bot status events; Slack url_verification + signature)
