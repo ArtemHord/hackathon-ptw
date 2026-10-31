@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, escalation, hub, jira, llm, runtime, speech
+from app import agent_voice, db, escalation, hub, jira, llm, recall, runtime, speech, tools
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +22,15 @@ CONTEXT_WINDOW_S = 120.0
 MIN_CONFIDENCE = 0.6
 JIRA_LOOKUP_S = 2.5  # overall cap on the in-call ticket lookup (M7.4)
 JIRA_MAX_KEYS = 2
+# Tool calling (M8.1, setting AGENT_TOOLS): Responses API loop, at most TOOL_ROUNDS function
+# rounds within TOOLS_CAP_S overall; any error/timeout -> the plain chat_json path.
+TOOLS_CAP_S = 9.0
+TOOL_ROUNDS = 2
+# Tool cap + fallback together stay within ANSWER_BUDGET_S (fallback gets what is left,
+# at least FALLBACK_MIN_S); a fallback timeout ends in the silent-failure path of _answer.
+ANSWER_BUDGET_S = 14.0
+FALLBACK_MIN_S = 3.0
+MAX_SOURCE_LINKS = 2
 SEED_DIR = Path(__file__).resolve().parent.parent / "seed"
 
 # Wake word (M6.3): AGENT_NAME ("Atlas") as a whole word within the first WAKE_MAX_WORDS
@@ -112,6 +121,24 @@ alone is not a reason to set needs_expert.
 
 ## Company documents
 {docs}
+"""
+
+# Appended to the system prompt on the tool path only (the chat_json fallback has no tools).
+TOOLS_PROMPT = """
+## Tools
+- web_search: ONLY for public, external facts: technology, software versions, news, \
+standards, public companies. NEVER search for anything internal to the company or the \
+owner (plans, dates, deadlines, migrations, decisions, people, projects, roadmaps): if the \
+context does not answer an internal question, set needs_expert=true as above, no search.
+- search_knowledge: the company knowledge base and facts from past meetings. Use it for an \
+internal question the documents above do not answer. Call it at most ONCE per question; \
+if it finds nothing relevant, set needs_expert=true right away.
+- create_doc: ONLY when someone explicitly asks you to create or write a document. Then \
+answer "I created the doc <title>." If it reports that the title exists, say so; you never \
+edit existing documents.
+- Facts returned by these tools count as context you may answer from.
+- Never put URLs, links, source names in brackets or markdown in the answer: it is spoken. \
+Sources are posted to the meeting chat separately.
 """
 
 _docs_cache: str | None = None
@@ -226,13 +253,28 @@ async def jira_context(question: str) -> list[dict[str, Any]]:
     return [i or {"key": k, "not_found": True} for k, i in zip(keys, found, strict=True)]
 
 
+_MD_CITE = re.compile(r"\s*\(\[[^\]]*\]\([^)]*\)\)")  # " ([python.org](https://...))"
+_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_URL = re.compile(r"\s*\(?https?://[^\s)]+\)?")
+
+
+def spoken(text: str) -> str:
+    """Strip what must not be spoken: markdown links/citations, bare URLs, emphasis."""
+    text = _MD_CITE.sub("", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _URL.sub("", text)
+    text = text.replace("**", "").replace("__", "").replace("`", "")
+    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
 def _normalize(raw: dict[str, Any]) -> dict[str, Any]:
     try:
         confidence = min(1.0, max(0.0, float(raw.get("confidence") or 0.0)))
     except (TypeError, ValueError):
         confidence = 0.0
     return {
-        "answer": str(raw.get("answer") or "").strip(),
+        "answer": spoken(str(raw.get("answer") or "")),
         "confidence": confidence,
         "needs_expert": bool(raw.get("needs_expert")),
         "topic": str(raw.get("topic") or "").strip(),
@@ -378,6 +420,91 @@ async def ask(meeting_id: str, utterance: dict[str, Any], question: str) -> bool
         return False
 
 
+def _new_meta() -> dict[str, Any]:
+    return {"path": "chat", "tools": [], "rounds": 0, "citations": [], "sources": []}
+
+
+async def _tool_loop(messages: list[dict[str, str]], meta: dict[str, Any]) -> dict[str, Any]:
+    """Responses API: web_search (server side) + function tools, then the ANSWER_SCHEMA JSON.
+    After TOOL_ROUNDS function rounds the last request forbids tools (tool_choice none)."""
+    items: list[dict[str, Any]] = [dict(m) for m in messages]
+    items[0]["content"] = items[0]["content"] + TOOLS_PROMPT
+    defs = tools.definitions()
+    prev: str | None = None
+    for rnd in range(TOOL_ROUNDS + 1):
+        last = rnd == TOOL_ROUNDS
+        r = await llm.respond(
+            items,
+            tools=defs,
+            schema_name="agent_answer",
+            schema=ANSWER_SCHEMA,
+            previous_response_id=prev,
+            tool_choice="none" if last else None,
+        )
+        meta["tools"].extend(["web_search"] * r["web_search"])
+        meta["citations"].extend(r["citations"])
+        meta["sources"].extend({"url": u} for u in r.get("sources") or [])
+        if not r["function_calls"]:
+            return llm.parse_json_object(r["text"])
+        if last:
+            raise llm.LLMError("tool rounds exhausted")
+        meta["rounds"] += 1
+        outputs: list[dict[str, Any]] = []
+        for call in r["function_calls"]:
+            meta["tools"].append(call["name"])
+            out = await tools.execute(call["name"], call["arguments"])
+            log.info("agent tool %s(%s) -> %s", call["name"], call["arguments"][:120], out[:160])
+            outputs.append(
+                {"type": "function_call_output", "call_id": call["call_id"], "output": out}
+            )
+        items, prev = outputs, r["id"]
+    raise llm.LLMError("unreachable")
+
+
+async def _think(meeting_id: str, messages: list[dict[str, str]]) -> tuple[dict[str, Any], dict]:
+    """(raw answer JSON, meta). Tool path when AGENT_TOOLS, else / on any failure chat_json."""
+    meta = _new_meta()
+    t0 = time.monotonic()
+    if runtime.get_bool("AGENT_TOOLS"):
+        try:
+            raw = await asyncio.wait_for(_tool_loop(messages, meta), TOOLS_CAP_S)
+            meta["path"] = "tools"
+            return raw, meta
+        except Exception as e:  # TimeoutError included
+            log.warning("agent tools failed in %s, falling back to chat_json: %r", meeting_id, e)
+            meta = {**_new_meta(), "path": "fallback", "tools": meta["tools"]}
+            budget = max(FALLBACK_MIN_S, ANSWER_BUDGET_S - (time.monotonic() - t0))
+            fallback = llm.chat_json(messages, "agent_answer", ANSWER_SCHEMA)
+            return await asyncio.wait_for(fallback, budget), meta
+    return await llm.chat_json(messages, "agent_answer", ANSWER_SCHEMA), meta
+
+
+def source_links(citations: list[dict[str, str]], limit: int = MAX_SOURCE_LINKS) -> list[str]:
+    """Up to `limit` distinct URLs (OpenAI's utm_source tag dropped)."""
+    out: list[str] = []
+    for c in citations:
+        url = re.sub(r"[?&]utm_source=openai$", "", str(c.get("url") or "").strip())
+        if url.startswith(("http://", "https://")) and url not in out:
+            out.append(url)
+        if len(out) >= limit:
+            break
+    return out
+
+
+_bg: set[asyncio.Task] = set()
+
+
+async def _post_sources(meeting_id: str, links: list[str]) -> None:
+    """Best effort: the web_search sources to the meeting chat. Never raises."""
+    try:
+        meeting = await db.get_meeting(meeting_id) or {}
+        text = "Sources: " + " ".join(links)
+        ok = await recall.send_chat_message(meeting.get("recall_bot_id"), text)
+        log.info("agent sources to chat in %s: %s (posted=%s)", meeting_id, links, ok)
+    except Exception as e:
+        log.warning("agent sources post failed in %s: %r", meeting_id, e)
+
+
 async def _orb(coro) -> None:
     """Orb visuals are best effort: bounded, never raises, never blocks the voice path."""
     try:
@@ -407,7 +534,7 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
         await speech.say_filler(meeting_id)
     brief, recent, experts, issues = await context
     messages = build_messages(brief, recent, asked_by, question, experts, issues)
-    task = asyncio.create_task(llm.chat_json(messages, "agent_answer", ANSWER_SCHEMA))
+    task = asyncio.create_task(_think(meeting_id, messages))
 
     if not filler:
         wait_s = max(0.0, FILLER_AFTER_S - (time.monotonic() - t0))
@@ -416,7 +543,8 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
             filler = True
             await speech.say_filler(meeting_id)
     try:
-        result = _normalize(await task)
+        raw, meta = await task
+        result = _normalize(raw)
     except Exception as e:
         log.warning("agent LLM failed in %s, staying silent: %s", meeting_id, e)
         await _orb(agent_voice.send_state(meeting_id, "idle"))
@@ -424,7 +552,10 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
     t_llm = time.monotonic()
 
     escalation_id: str | None = None
-    if result["needs_expert"] or result["confidence"] < MIN_CONFIDENCE or not result["answer"]:
+    escalated = bool(
+        result["needs_expert"] or result["confidence"] < MIN_CONFIDENCE or not result["answer"]
+    )
+    if escalated:
         expert: str | None = None
         try:
             hooked = await on_needs_expert(
@@ -448,9 +579,15 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
 
     delivered = await speech.say(meeting_id, text)
     t_played = time.monotonic()
+    # cited URLs first, then the pages web_search looked at
+    links = [] if escalated else source_links(meta["citations"] + meta["sources"])
+    if links and delivered:
+        bg = asyncio.create_task(_post_sources(meeting_id, links))
+        _bg.add(bg)
+        bg.add_done_callback(_bg.discard)
     log.info(
         "agent latency %s: trigger->llm %dms, llm->tts+push %dms, total %dms (filler=%s, "
-        "delivered=%s, conf=%.2f, needs_expert=%s, topic=%r)",
+        "delivered=%s, conf=%.2f, needs_expert=%s, topic=%r, path=%s, tools=%s, rounds=%d)",
         meeting_id,
         _ms(t0, t_llm),
         _ms(t_llm, t_played),
@@ -460,6 +597,9 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
         result["confidence"],
         result["needs_expert"],
         result["topic"],
+        meta["path"],
+        ",".join(meta["tools"]) or "-",
+        meta["rounds"],
     )
 
     ts = int(round(call_ts + (t_played - t0)))
