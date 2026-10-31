@@ -16,12 +16,13 @@ Everything the agent says or writes in a call is in English (demo language).
 - Test: `cd backend && uv run pytest -q` (no real network: mock every external HTTP call with respx)
 - Smoke: `curl -s localhost:8000/health`
 - Lint/format: `cd backend && uv run ruff check --fix . && uv run ruff format .`
-- Migrate / seed: `cd backend && uv run python ../scripts/migrate.py` · `cd backend && uv run python ../scripts/seed_kb.py`
-- Simulate a call without Recall: web app "Simulate call" (`POST /debug/simulate`) or `cd backend && uv run python ../scripts/simulate_meeting.py [--speed 20] [--expert-reply Thursday|--no-reply] [--meeting-id ID]` (needs a running backend + DB)
+- Migrate / seed: `cd backend && uv run python ../scripts/migrate.py` · `cd backend && uv run python ../scripts/seed_kb.py` · MSP demo data (KB docs, 6 past incidents, experts tagged `profile:msp`): `cd backend && uv run python ../scripts/seed_msp.py`
+- Demo profile: runtime setting `DEMO_PROFILE` = `acme` (stand-up demo, default) | `msp` (NovaStore INC-024 war room; `/ui` → Agent → Demo profile). It switches prompt docs, experts, in-call tools, default brief and the simulate script (`app/profile.py`). MSP eval (10 questions, needs `OPENAI_API_KEY`, no DB): `cd backend && uv run python ../scripts/eval_msp.py` → `docs/EVAL_MSP.md`
+- Simulate a call without Recall: web app "Simulate call" (`POST /debug/simulate`) or `cd backend && uv run python ../scripts/simulate_meeting.py [--speed 20] [--expert-reply TEXT|--no-reply] [--meeting-id ID]` (needs a running backend + DB; transcript, brief and default reply follow `DEMO_PROFILE`)
 - Demo run sheet: `docs/DEMO.md`; agent page debug: `/agent?demo=1` or `?state=idle|listening|thinking|speaking|ask`
 - Deploy: Railway (EU) from `backend/Dockerfile`, health check `/health`.
 - Env: copy `.env.example` → `.env`; variable names are in SPEC.md ("Zmienne środowiskowe"). Never read, print or commit `.env`.
-- Runtime settings: agent name, owner name, Slack / Telegram / Jira credentials are editable in the web app (table `app_settings`, `app/runtime.py`); a non-empty DB value overrides env. Read them with `runtime.get(KEY)`, never `get_settings()` directly.
+- Runtime settings: agent name, owner name, demo profile, Slack / Telegram / Jira credentials are editable in the web app (table `app_settings`, `app/runtime.py`); a non-empty DB value overrides env. Read them with `runtime.get(KEY)`, never `get_settings()` directly.
 - If you change how the project is installed, run or tested, update this section in the same PR.
 
 ## Repo map

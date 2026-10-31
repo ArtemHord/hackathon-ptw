@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
         async with db.lifespan(app):
             await runtime.load()  # UI-edited settings over env, before anything reads them
             await escalation.seed_experts()
+            await escalation.seed_msp_experts()  # M10: tagged profile:msp, once
             yield
     finally:
         warm.cancel()

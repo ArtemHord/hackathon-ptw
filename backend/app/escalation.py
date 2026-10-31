@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, hub, jira, recall, runtime, speech
+from app import agent_voice, db, hub, jira, profile, recall, runtime, speech
 from app.config import get_settings
 from app.notifier.base import Expert, SentMessage, get_notifier
 
@@ -41,9 +41,22 @@ def _tokens(s: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", s.lower()))
 
 
-def match_expert(topic: str, experts: list[Expert]) -> Expert:
-    """Best expert by token/substring overlap of topic vs expert topics; owner as fallback."""
+def _named(text: str, experts: list[Expert]) -> Expert | None:
+    """The expert whose name is a whole word in `text` ("ask Ola" -> Ola), else None."""
+    for e in experts:
+        name = (e.name or "").strip()
+        if name and re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", text or "", re.IGNORECASE):
+            return e
+    return None
+
+
+def match_expert(topic: str, experts: list[Expert], question: str = "") -> Expert:
+    """A named expert (topic first, then the question) wins; else the best token/substring
+    overlap of topic vs expert topics; owner as fallback."""
     owner = next((e for e in experts if e.is_owner), None) or experts[0]
+    named = _named(topic, experts) or _named(question, experts)
+    if named is not None:
+        return named
     topic_l = (topic or "").lower().strip()
     if not topic_l or topic_l == "owner":
         return owner
@@ -68,37 +81,99 @@ def match_expert(topic: str, experts: list[Expert]) -> Expert:
     return best
 
 
-def _seed_experts() -> list[Expert]:
-    data = json.loads(SEED_PATH.read_text())["experts"]
+# Experts per demo profile without a migration (M10): a "profile:msp" tag in topics, no tag
+# = acme. The tag never leaves this module / the API layer.
+PROFILE_TAG = "profile:"
+
+
+def topics_profile(topics: list[str] | None) -> str:
+    for t in topics or []:
+        if str(t).startswith(PROFILE_TAG):
+            return str(t)[len(PROFILE_TAG) :] or "acme"
+    return "acme"
+
+
+def strip_profile(topics: list[str] | None) -> list[str]:
+    return [t for t in topics or [] if not str(t).startswith(PROFILE_TAG)]
+
+
+def tag_profile(topics: list[str], name: str) -> list[str]:
+    """Topics stored for an expert of profile `name` (acme stays untagged)."""
+    clean = strip_profile(topics)
+    return clean if name == "acme" else [*clean, f"{PROFILE_TAG}{name}"]
+
+
+def _from_row(r: dict[str, Any]) -> Expert:
+    fields = {k: r.get(k) for k in Expert.__dataclass_fields__ if k in r}
+    fields["topics"] = strip_profile(list(r.get("topics") or []))
+    fields["is_owner"] = bool(r.get("is_owner")) or "owner" in (r.get("topics") or [])
+    return Expert(**fields)
+
+
+def _seed_file(name: str | None = None) -> list[dict[str, Any]]:
+    path = SEED_PATH if (name or profile.current()) == "acme" else profile.experts_seed_path(name)
+    return json.loads(path.read_text())["experts"]
+
+
+def _seed_experts(name: str | None = None) -> list[Expert]:
     return [
         Expert(**{**d, "is_owner": "owner" in d.get("topics", []) or d.get("is_owner", False)})
-        for d in data
+        for d in _seed_file(name)
     ]
 
 
 async def load_experts(refresh: bool = False) -> list[Expert]:
-    """Cached experts from DB; HACK: falls back to seed file when no DATABASE_URL."""
+    """Cached experts of the current demo profile from DB; HACK: falls back to the profile's
+    seed file when there is no DATABASE_URL (or no expert of this profile)."""
     global _cache
+    name = profile.current()  # may reset _cache when the profile changed
     if _cache is not None and not refresh:
         return _cache
+    _cache = None
     if get_settings().DATABASE_URL:
-        _cache = [Expert(**r) for r in await db.list_experts()]
+        rows = await db.list_experts()
+        _cache = [_from_row(r) for r in rows if topics_profile(r.get("topics")) == name]
     if not _cache:
-        _cache = _seed_experts()
+        _cache = _seed_experts(name)
     return _cache
 
 
 async def seed_experts() -> None:
-    """HACK: seed/experts.json at startup, only with DATABASE_URL and an empty experts table
-    (experts are edited in the web UI since M7.1; reseeding would overwrite those edits)."""
+    """HACK: seed/experts.json at startup, only with DATABASE_URL and no acme expert in the
+    table (experts are edited in the web UI since M7.1; reseeding would overwrite edits)."""
     if not get_settings().DATABASE_URL:
         return
     try:
-        if await db.count_experts() == 0:
-            await db.upsert_experts(json.loads(SEED_PATH.read_text())["experts"])
+        rows = await db.list_experts()
+        if not any(topics_profile(r.get("topics")) == "acme" for r in rows):
+            await db.upsert_experts(_seed_file("acme"))
         await load_experts(refresh=True)
     except Exception as e:
         log.warning("expert seed failed: %s", e)
+
+
+async def seed_msp_experts() -> int:
+    """M10: seed/msp/experts.json tagged "profile:msp", only when no msp expert exists.
+    Idempotent, never overwrites UI edits. Returns how many were seeded."""
+    if not get_settings().DATABASE_URL:
+        return 0
+    try:
+        rows = await db.list_experts()
+        if any(topics_profile(r.get("topics")) == "msp" for r in rows):
+            return 0
+        path = profile.experts_seed_path("msp")
+        if not path.exists():
+            return 0
+        items = [
+            {**d, "topics": tag_profile(list(d.get("topics") or []), "msp")}
+            for d in json.loads(path.read_text())["experts"]
+        ]
+        await db.upsert_experts(items)
+        await load_experts(refresh=True)
+        return len(items)
+    except Exception as e:
+        log.warning("msp expert seed failed: %s", e)
+        return 0
 
 
 def _notifier_for(channel: str):
@@ -165,7 +240,7 @@ async def start(meeting_id: str, question: str, topic: str, asked_by: str) -> di
     """Orchestrator hook. Returns {"expert", "escalation_id"} before any Slack I/O; None if the
     escalation could not be recorded. Never raises."""
     try:
-        expert = match_expert(topic, await load_experts())
+        expert = match_expert(topic, await load_experts(), question)
         meeting, recent = await asyncio.gather(
             _try(db.get_meeting(meeting_id), "get_meeting"),
             _try(db.get_last_utterances(meeting_id, CONTEXT_LINES), "get_last_utterances", []),

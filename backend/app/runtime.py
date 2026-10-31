@@ -26,6 +26,7 @@ EDITABLE = (
     "JIRA_PROJECT_KEY",
     "JIRA_AUTO_CREATE",
     "AGENT_TOOLS",
+    "DEMO_PROFILE",
 )
 SECRETS = frozenset(
     {

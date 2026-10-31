@@ -1,0 +1,65 @@
+{
+  "_note": "HACK: placeholder emails, set real Slack emails in /ui → Experts",
+  "experts": [
+    {
+      "name": "Ola",
+      "role": "Integrations SME",
+      "topics": [
+        "salesforce",
+        "crm bridge",
+        "woocommerce",
+        "integrations",
+        "plugin authorization",
+        "token"
+      ],
+      "channel": "slack",
+      "email": "ola@example.com",
+      "slack_user_id": null,
+      "telegram_chat_id": null
+    },
+    {
+      "name": "Marek",
+      "role": "Backend / on-call engineer",
+      "topics": [
+        "php",
+        "api",
+        "payment gateway",
+        "backend",
+        "on-call"
+      ],
+      "channel": "slack",
+      "email": "marek@example.com",
+      "slack_user_id": null,
+      "telegram_chat_id": null
+    },
+    {
+      "name": "Patrycja",
+      "role": "Frontend",
+      "topics": [
+        "frontend",
+        "storefront",
+        "promotional pricing",
+        "prices"
+      ],
+      "channel": "slack",
+      "email": "patrycja@example.com",
+      "slack_user_id": null,
+      "telegram_chat_id": null
+    },
+    {
+      "name": "Kamil",
+      "role": "Incident Lead",
+      "topics": [
+        "owner",
+        "incident lead",
+        "mitigation approval",
+        "customer communication"
+      ],
+      "channel": "slack",
+      "email": "kamil@example.com",
+      "slack_user_id": null,
+      "telegram_chat_id": null,
+      "is_owner": true
+    }
+  ]
+}

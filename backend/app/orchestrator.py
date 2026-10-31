@@ -6,6 +6,7 @@ confidence, needs_expert, topic} -> filler if slow -> say() -> agent_said row + 
 """
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -13,7 +14,19 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, escalation, hub, jira, llm, recall, runtime, speech, tools
+from app import (
+    agent_voice,
+    db,
+    escalation,
+    hub,
+    jira,
+    llm,
+    profile,
+    recall,
+    runtime,
+    speech,
+    tools,
+)
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +44,8 @@ TOOL_ROUNDS = 2
 ANSWER_BUDGET_S = 14.0
 FALLBACK_MIN_S = 3.0
 MAX_SOURCE_LINKS = 2
+MAX_SOURCE_REFS = 3  # M10: tool citations ("INC-011 14:19 Ola: ...") posted to the chat
+CHAT_MAX_CHARS = 500  # Recall chat message cap
 SEED_DIR = Path(__file__).resolve().parent.parent / "seed"
 
 # Wake word (M6.3): AGENT_NAME ("Atlas") as a whole word within the first WAKE_MAX_WORDS
@@ -145,7 +160,54 @@ question, say what they were asked and answered instead of applying it to this q
 Sources are posted to the meeting chat separately.
 """
 
-_docs_cache: str | None = None
+# M10, profile msp: appended to the system prompt on both paths (tools and chat_json).
+MSP_PROMPT = """
+## Incident response rules (MSP war room)
+- This is a live incident call. The owner's brief is the CURRENT incident ticket.
+- Past incidents are evidence, not a diagnosis of the current incident. State the current \
+incident's cause only as a hypothesis to verify, until someone in this call confirms it in \
+the recent transcript. Never say the current cause is confirmed or certain.
+- When you answer from a past incident, always name the incident ID and the time of the \
+quote you rely on, e.g. "In INC-011 at 14:19 Ola confirmed ...".
+- Never give money, loss, revenue, cost or SLA figures that no source contains: say there \
+is no data on that.
+- Never offer or claim to disable plugins, rotate or change tokens, deploy or change \
+production yourself: an authorized engineer does that after the Incident Lead approves.
+- Do not mix incidents: when asked whether a similar-looking incident had the same cause, \
+compare it with the past incident that matches ALL reported symptoms and name both IDs: \
+"No: INC-A was <its cause> with <its symptoms>, while INC-B, which matched all symptoms, was \
+<its cause>." Never compare only with the current incident.
+- When someone asks you to ask or contact a named person, set needs_expert=true and topic \
+to that person's name.
+- "There is no data on that", "that is not confirmed yet" or "no, I can't do that" are \
+complete answers: needs_expert=false with high confidence. This overrides the rule to set \
+needs_expert when the context lacks the answer.
+"""
+
+# M10, profile msp: the tool section instead of TOOLS_PROMPT (no web_search, no KB search).
+MSP_TOOLS_PROMPT = """
+## Tools
+- find_similar_incidents: whenever someone asks about similar, earlier or past incidents, or \
+what happened before. Pass the symptom tags reported in this call and in the brief. Answer \
+from the best full match; mention a partial match only to say why it differs.
+- get_incident: details and timed quotes of one incident named by its ID (e.g. INC-010).
+- get_runbook: safe checks and steps, the runbook owner and its safety rule. ALWAYS call it \
+for questions about what to check, mitigation, what is allowed, or whether you or anyone \
+may disable, change or deploy something; base the answer on its safety rule.
+- find_expert: who knows a topic, which incidents they resolved and whether they can be \
+reached. Use it for "who should help with X"; name the person and how to reach them (the \
+contact, e.g. "on Slack as ola-integrations").
+- create_doc: ONLY when someone explicitly asks you to create a document.
+- Questions about past incidents, runbooks, permissions or people need a tool call first; \
+only the current incident's status (brief, transcript) or a missing figure needs none.
+- Tool results count as context you may answer from. Name the incident ID and the quote \
+time from the tool's citations. One tool round is usually enough; never call the same tool \
+twice for one question.
+- Never put URLs, links or markdown in the answer: it is spoken. Citations are posted to \
+the meeting chat separately.
+"""
+
+_docs_cache: dict[str, str] = {}  # profile -> prompt docs
 _experts_cache: str | None = None
 _busy: set[str] = set()  # meeting_ids with an answer in progress
 
@@ -182,18 +244,24 @@ def parse_trigger(text: str) -> str | None:
 
 
 def seed_docs() -> str:
-    """HACK: all seed/*.md straight into the prompt until RAG (M4.1). Read once."""
-    global _docs_cache
-    if _docs_cache is None:
-        parts = [f"### {p.name}\n{p.read_text().strip()}" for p in sorted(SEED_DIR.glob("*.md"))]
-        _docs_cache = "\n\n".join(parts)
-    return _docs_cache
+    """HACK: the profile's prompt docs straight into the prompt (acme: all seed/*.md, msp:
+    client + expert directory). Read once per profile."""
+    name = profile.current()
+    if name not in _docs_cache:
+        base = profile.seed_dir()
+        parts = [
+            f"### {n}\n{(base / n).read_text(encoding='utf-8').strip()}"
+            for n in profile.prompt_doc_names()
+        ]
+        _docs_cache[name] = "\n\n".join(parts)
+    return _docs_cache[name]
 
 
 async def experts_text() -> str:
     """Expert list for the prompt, from escalation.load_experts() (DB when configured, seed
     file otherwise). Cached; experts CRUD (settings_api) resets _experts_cache."""
     global _experts_cache
+    profile.current()  # drops a cache of the previous profile
     if _experts_cache is None:
         experts = await escalation.load_experts()
         lines = [f"- {e.name}: {', '.join(e.topics or [])}" for e in experts]
@@ -211,11 +279,13 @@ def build_messages(
 ) -> list[dict[str, str]]:
     system = SYSTEM_PROMPT.format(
         agent=runtime.get("AGENT_NAME"),
-        owner=runtime.get("OWNER_NAME"),
+        owner=profile.owner_name(),
         brief=brief.strip() or "(no brief)",
         experts=experts,
         docs=seed_docs(),
     )
+    if profile.is_msp():
+        system += MSP_PROMPT
     transcript = "\n".join(f"{u['speaker']}: {u['text']}" for u in recent) or "(empty)"
     user = f"Recent transcript (last 2 minutes):\n{transcript}\n\n{speaker} asks you: {question}"
     if jira_issues:
@@ -243,7 +313,9 @@ async def jira_context(question: str) -> list[dict[str, Any]]:
     overall). [] when Jira isn't configured, no key is found or the lookup fails. Never raises."""
     if not jira.configured():
         return []
-    keys = jira.extract_keys(question, jira.project_key())[:JIRA_MAX_KEYS]
+    keys = jira.extract_keys(question, jira.project_key())
+    incident_ids = profile.incident_ids()  # msp: INC-011 is an incident, not a Jira ticket
+    keys = [k for k in keys if profile.norm_key(k) not in incident_ids][:JIRA_MAX_KEYS]
     if not keys:
         return []
     try:
@@ -425,14 +497,27 @@ async def ask(meeting_id: str, utterance: dict[str, Any], question: str) -> bool
 
 
 def _new_meta() -> dict[str, Any]:
-    return {"path": "chat", "tools": [], "rounds": 0, "citations": [], "sources": []}
+    # citations/sources: web_search URLs; refs: "citations" of function results (M10)
+    return {"path": "chat", "tools": [], "rounds": 0, "citations": [], "sources": [], "refs": []}
+
+
+def _refs(output: str) -> list[str]:
+    """The "citations" list of one function result (JSON string), [] otherwise."""
+    try:
+        data = json.loads(output or "")
+    except ValueError:
+        return []
+    cites = data.get("citations") if isinstance(data, dict) else None
+    if not isinstance(cites, list):
+        return []
+    return [str(c).strip() for c in cites if str(c).strip()]
 
 
 async def _tool_loop(messages: list[dict[str, str]], meta: dict[str, Any]) -> dict[str, Any]:
     """Responses API: web_search (server side) + function tools, then the ANSWER_SCHEMA JSON.
     After TOOL_ROUNDS function rounds the last request forbids tools (tool_choice none)."""
     items: list[dict[str, Any]] = [dict(m) for m in messages]
-    items[0]["content"] = items[0]["content"] + TOOLS_PROMPT
+    items[0]["content"] += MSP_TOOLS_PROMPT if profile.is_msp() else TOOLS_PROMPT
     defs = tools.definitions()
     prev: str | None = None
     for rnd in range(TOOL_ROUNDS + 1):
@@ -458,6 +543,7 @@ async def _tool_loop(messages: list[dict[str, str]], meta: dict[str, Any]) -> di
             meta["tools"].append(call["name"])
             out = await tools.execute(call["name"], call["arguments"])
             log.info("agent tool %s(%s) -> %s", call["name"], call["arguments"][:120], out[:160])
+            meta["refs"].extend(_refs(out))
             outputs.append(
                 {"type": "function_call_output", "call_id": call["call_id"], "output": out}
             )
@@ -495,16 +581,62 @@ def source_links(citations: list[dict[str, str]], limit: int = MAX_SOURCE_LINKS)
     return out
 
 
+def source_refs(refs: list[str], limit: int = MAX_SOURCE_REFS) -> list[str]:
+    """Up to `limit` distinct tool citations, each kept short for the chat."""
+    out: list[str] = []
+    for r in refs:
+        r = re.sub(r"\s+", " ", str(r)).strip()
+        r = r if len(r) <= 160 else r[:157].rstrip() + '..."'
+        if r and r not in out:
+            out.append(r)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def sources_text(links: list[str], refs: list[str]) -> str:
+    """ "Sources: <url> <url>" (web, as before M10), tool citations joined by " | "; "" if
+    none. Capped at the Recall chat limit."""
+    if not links and not refs:
+        return ""
+    text = "Sources: " + (" | ".join([*links, *refs]) if refs else " ".join(links))
+    return text if len(text) <= CHAT_MAX_CHARS else text[: CHAT_MAX_CHARS - 3].rstrip() + "..."
+
+
+def is_escalated(result: dict[str, Any]) -> bool:
+    """The normalized answer goes to an expert instead of being spoken."""
+    return bool(
+        result["needs_expert"] or result["confidence"] < MIN_CONFIDENCE or not result["answer"]
+    )
+
+
+async def answer_question(
+    question: str,
+    *,
+    meeting_id: str = "offline",
+    brief: str = "",
+    transcript: list[dict[str, Any]] | None = None,
+    speaker: str = "Someone",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(normalized answer, meta) through the same prompt + think path as a call, without
+    speaking, escalating or touching the meeting (scripts/eval_msp.py). Raises on LLM failure."""
+    experts, issues = await asyncio.gather(
+        _safe(experts_text(), "(none)"), _safe(jira_context(question), [])
+    )
+    messages = build_messages(brief, transcript or [], speaker, question, experts, issues)
+    raw, meta = await _think(meeting_id, messages)
+    return _normalize(raw), meta
+
+
 _bg: set[asyncio.Task] = set()
 
 
-async def _post_sources(meeting_id: str, links: list[str]) -> None:
-    """Best effort: the web_search sources to the meeting chat. Never raises."""
+async def _post_sources(meeting_id: str, text: str) -> None:
+    """Best effort: the sources line (web URLs or tool citations) to the meeting chat."""
     try:
         meeting = await db.get_meeting(meeting_id) or {}
-        text = "Sources: " + " ".join(links)
         ok = await recall.send_chat_message(meeting.get("recall_bot_id"), text)
-        log.info("agent sources to chat in %s: %s (posted=%s)", meeting_id, links, ok)
+        log.info("agent sources to chat in %s: %s (posted=%s)", meeting_id, text, ok)
     except Exception as e:
         log.warning("agent sources post failed in %s: %r", meeting_id, e)
 
@@ -556,9 +688,7 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
     t_llm = time.monotonic()
 
     escalation_id: str | None = None
-    escalated = bool(
-        result["needs_expert"] or result["confidence"] < MIN_CONFIDENCE or not result["answer"]
-    )
+    escalated = is_escalated(result)
     if escalated:
         expert: str | None = None
         try:
@@ -585,8 +715,10 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
     t_played = time.monotonic()
     # cited URLs first, then the pages web_search looked at
     links = [] if escalated else source_links(meta["citations"] + meta["sources"])
-    if links and delivered:
-        bg = asyncio.create_task(_post_sources(meeting_id, links))
+    refs = [] if escalated else source_refs(meta.get("refs") or [])
+    chat_line = sources_text(links, refs)
+    if chat_line and delivered:
+        bg = asyncio.create_task(_post_sources(meeting_id, chat_line))
         _bg.add(bg)
         bg.add_done_callback(_bg.discard)
     log.info(

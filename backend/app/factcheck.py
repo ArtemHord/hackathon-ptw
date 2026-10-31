@@ -11,7 +11,7 @@ import re
 import time
 from typing import Any
 
-from app import db, hub, llm, orchestrator, rag, recall
+from app import db, hub, llm, orchestrator, profile, rag, recall
 
 log = logging.getLogger(__name__)
 
@@ -34,8 +34,12 @@ _last_post: dict[str, float] = {}  # meeting_id -> monotonic time of the last He
 
 
 def _team_names() -> list[str]:
-    """First column of the team.md table (Artem, Dima, ...)."""
+    """acme: first column of the team.md table (Artem, Dima, ...); msp (M10): the experts
+    of incidents.json (Ola, Marek, ...)."""
     names: list[str] = []
+    if profile.is_msp():
+        experts = profile.incidents().get("experts") or []
+        return [str(e["name"]) for e in experts if isinstance(e, dict) and e.get("name")]
     try:
         text = (orchestrator.SEED_DIR / "team.md").read_text()
     except OSError:
@@ -49,6 +53,7 @@ def _team_names() -> list[str]:
 
 def _filter() -> re.Pattern[str]:
     global _filter_cache
+    profile.current()  # a profile change drops _filter_cache
     if _filter_cache is None:
         names = "|".join(re.escape(n) for n in _team_names())
         pattern = _BASE_FILTER + (rf"|\b(?:{names})\b" if names else "")
