@@ -15,7 +15,7 @@ DEEPGRAM = {
         "model": "nova-3",
         "language": "en",
         "keyterm": ["Atlas", "Hey Atlas", "Okay Atlas"],
-        "endpointing": 300,
+        "endpointing": 500,
     }
 }
 
@@ -66,7 +66,7 @@ def test_deepgram_body_shape(client, store, monkeypatch):  # noqa: F811
     assert sent["recording_config"]["transcript"] == {"provider": DEEPGRAM}
     assert (
         sent["recording_config"]["transcript"]["provider"]["deepgram_streaming"]["endpointing"]
-        == 300
+        == 500
     )  # keeps "Okay Atlas," and the question in one utterance
     _assert_rest_unchanged(sent)
     assert store["meetings"][r.json()["id"]]["recall_bot_id"] == "bot_2"

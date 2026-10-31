@@ -61,8 +61,8 @@ def _transcript_provider(provider: str) -> dict[str, Any]:
                 "model": "nova-3",
                 "language": "en",
                 "keyterm": keyterms(),
-                # Deepgram default 10 ms splits "Okay Atlas," from the question
-                "endpointing": 300,
+                # Deepgram default 10 ms splits "Atlas, what did" | "Artem finish" (live test 3)
+                "endpointing": 500,
             }
         }
     return {"recallai_streaming": {"mode": "prioritize_low_latency", "language_code": "en"}}
