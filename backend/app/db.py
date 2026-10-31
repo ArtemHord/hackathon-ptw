@@ -1,5 +1,6 @@
 """asyncpg pool (lazy) + query helpers. The app boots and /health works without DATABASE_URL."""
 
+import asyncio
 import json
 import logging
 import ssl
@@ -441,3 +442,70 @@ async def list_escalations(meeting_id: str | None = None) -> list[dict[str, Any]
         meeting_id,
     )
     return [dict(r) for r in rows]
+
+
+# --- read helpers for GET /meetings, GET /meetings/{id} ---------------------
+
+
+async def list_meetings(limit: int = 100) -> list[dict[str, Any]]:
+    pool = await get_pool()
+    rows = await pool.fetch(
+        f"""select {MEETING_COLUMNS} from meetings
+            order by coalesce(started_at, created_at) desc, created_at desc limit $1""",
+        limit,
+    )
+    return [dict(r) for r in rows]
+
+
+async def get_meeting_detail(meeting_id: str, since: int | None = None) -> dict[str, Any] | None:
+    """Meeting row + the per-table lists of docs/API.pl.md. With `since`: only ts > since;
+    escalations also when answered_ts > since or when they ended in timeout (no change time)."""
+    m = await get_meeting(meeting_id)
+    if m is None:
+        return None
+    pool = await get_pool()
+    s = None if since is None else float(since)
+    utt, fcs, escs, said = await asyncio.gather(
+        pool.fetch(
+            """select id, speaker, text, ts_start as ts from utterances
+               where meeting_id = $1 and ($2::float8 is null or ts_start > $2)
+               order by ts_start, created_at""",
+            meeting_id,
+            s,
+        ),
+        pool.fetch(
+            """select f.id, f.claim, f.verdict, d.title as source, f.correction, f.ts,
+                      f.proposal_id
+               from fact_checks f
+               left join kb_chunks c on c.id = f.kb_chunk_id
+               left join kb_docs d on d.id = c.doc_id
+               where f.meeting_id = $1 and ($2::float8 is null or f.ts > $2)
+               order by f.ts, f.created_at""",
+            meeting_id,
+            s,
+        ),
+        pool.fetch(
+            f"""select {ESCALATION_COLUMNS} from escalations e
+                left join experts x on x.id = e.expert_id
+                where e.meeting_id = $1
+                  and ($2::float8 is null or e.ts > $2 or e.answered_ts > $2
+                       or e.status = 'timeout')
+                order by e.ts, e.created_at""",
+            meeting_id,
+            s,
+        ),
+        pool.fetch(
+            """select id, text, ts, in_reply_to from agent_said
+               where meeting_id = $1 and ($2::float8 is null or ts > $2)
+               order by ts, created_at""",
+            meeting_id,
+            s,
+        ),
+    )
+    return {
+        "meeting": m,
+        "utterances": [dict(r) for r in utt],
+        "fact_checks": [dict(r) for r in fcs],
+        "escalations": [dict(r) for r in escs],
+        "agent_said": [dict(r) for r in said],
+    }

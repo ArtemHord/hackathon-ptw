@@ -1,12 +1,13 @@
 """App endpoints for meetings (docs/API.pl.md): POST /meetings, POST /meetings/{id}/leave."""
 
+import json
 import logging
 import secrets
 from datetime import UTC, datetime
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, FastAPI, Header, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -137,3 +138,112 @@ async def leave_meeting(meeting_id: str) -> dict[str, Any]:
     # DB status stays as is until the bot.done webhook (M1.3) flips it to done.
     # TODO M4.2 postcall: post-call summary starts on bot.done (decisions.md #16), not here.
     return {"id": meeting_id, "status": "done", "summary_status": "processing"}
+
+
+# --- read endpoints (screens 1, 3-fallback, 4) -----------------------------------
+
+
+def _int(v: Any) -> int | None:
+    return None if v is None else int(round(float(v)))
+
+
+def _json_list(v: Any) -> list[Any]:
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except ValueError:
+            return []
+    return v if isinstance(v, list) else []
+
+
+def _mode(m: dict[str, Any]) -> str:
+    return "delegate" if m.get("mode") == "delegate" else "notetaker"
+
+
+def _status(m: dict[str, Any]) -> str:
+    st = m.get("status")
+    return st if st in ("joining", "in_call", "done", "failed") else "joining"
+
+
+def _duration_min(m: dict[str, Any]) -> int | None:
+    if _status(m) not in ("done", "failed") or not m.get("started_at") or not m.get("ended_at"):
+        return None
+    return max(0, round((m["ended_at"] - m["started_at"]).total_seconds() / 60))
+
+
+def _meeting_head(m: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": m["id"],
+        "title": m.get("title") or "",
+        "platform": m.get("platform"),
+        "mode": _mode(m),
+        "status": _status(m),
+    }
+
+
+@router.get("/meetings")
+async def list_meetings() -> dict[str, Any]:
+    items = []
+    for m in await db.list_meetings():
+        items.append(
+            {
+                **_meeting_head(m),
+                "live": _status(m) == "in_call",
+                "started_at": iso(m.get("started_at")),
+                "duration_min": _duration_min(m),
+            }
+        )
+    return {"items": items}
+
+
+@router.get("/meetings/{meeting_id}")
+async def get_meeting_detail(meeting_id: str, since: int | None = Query(default=None)):
+    d = await db.get_meeting_detail(meeting_id, since)
+    if d is None:
+        raise ApiError(404, "not_found", f"Meeting {meeting_id} not found")
+    from app import escalation  # lazy: escalation -> speech -> meetings (cycle)
+
+    m = d["meeting"]
+    return {
+        **_meeting_head(m),
+        "started_at": iso(m.get("started_at")),
+        "duration_min": _duration_min(m),
+        "summary": m.get("summary") or "",
+        "decisions": [str(x) for x in _json_list(m.get("decisions"))],
+        "action_items": [
+            {
+                "id": str(a.get("id") or f"ai_{i + 1:02d}"),
+                "owner": a.get("owner"),
+                "text": a.get("text") or "",
+                "due": a.get("due"),
+            }
+            for i, a in enumerate(_json_list(m.get("action_items")))
+            if isinstance(a, dict)
+        ],
+        "fact_checks": [
+            {
+                "id": f["id"],
+                "claim": f["claim"],
+                "verdict": f["verdict"],
+                "source": f.get("source"),
+                "correction": f.get("correction"),
+                "ts": _int(f.get("ts")) or 0,
+                "proposal_id": f.get("proposal_id"),
+            }
+            for f in d["fact_checks"]
+        ],
+        "escalations": [escalation.public(e) for e in d["escalations"]],
+        "utterances": [
+            {"id": u["id"], "speaker": u["speaker"], "text": u["text"], "ts": _int(u["ts"]) or 0}
+            for u in d["utterances"]
+        ],
+        "agent_said": [
+            {
+                "id": a["id"],
+                "text": a["text"],
+                "ts": _int(a.get("ts")) or 0,
+                "in_reply_to": a.get("in_reply_to"),
+            }
+            for a in d["agent_said"]
+        ],
+    }
