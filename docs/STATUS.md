@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M1
-- In progress: M1.3 bot status webhook (developer)
+- In progress: M1.4 simulate_meeting.py + demo fixture (developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -20,7 +20,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 ### M1 · Agent in the call (target 04:30)
 - [x] M1.1 Recall client, `POST /meetings`, `POST /meetings/{id}/leave`; bot joins Google Meet
 - [x] M1.2 Transcript webhook → `utterances`, dedup, WS event
-- [ ] M1.3 Bot status webhook
+- [x] M1.3 Bot status webhook
 - [ ] M1.4 `scripts/simulate_meeting.py` + demo-scenario fixture
 
 ### M2 · Agent speaks (target 05:30)
@@ -67,6 +67,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:18 · M1.3 · status webhook mapping + terminal-state guard, postcall_hook stub; 30 tests · 609ed4d
 - 03:16 · M1.2 · transcript webhook dedup + /app/ws (4401), orchestrator_hook stub for M2.3; 26 tests; Docker --no-access-log (token in query) · 2adf1ce
 - 03:13 · M1.1 · Recall create/leave, Bearer auth, lazy DB pool; 18 tests, db.py checked on real pg · c30cb1d
 - 03:08 · M0 verify · 6/6 PASS (pytest, ruff, /health, docker PORT=9000, migrate ×2, mocks) · contract frozen
