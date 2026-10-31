@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M2.5b orb server signals (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: M4.1 KB RAG on pgvector (senior-developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -32,7 +32,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 
 ### M2.5 · Agent camera orb (designer, added 03:55)
 - [x] M2.5a Port orb (`docs/design/agent-clips/`) to vanilla JS in agent page: 4 states + transitions + ask sequence, WS `state`/`ask`/`ask_done`, mic + output levels (senior-developer)
-- [ ] M2.5b Server signals: orchestrator → thinking/idle, escalation → ask/ask_done (developer)
+- [x] M2.5b Server signals: orchestrator → thinking/idle, escalation → ask/ask_done (developer)
 
 ### M3 · Slack escalation — HERO (target 06:30)
 - [x] M3.1 `Notifier` interface + expert matching
@@ -68,14 +68,16 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Run: `cd backend && uv run pytest -q`; simulate: `cd backend && DATABASE_URL=… WEBHOOK_TOKEN=… DEMO_TOKEN=… uv run python ../scripts/simulate_meeting.py --speed 20` (needs running backend + DB; exit 1 if utterance events != unique lines); Recall status dashboard URL `{PUBLIC_BASE_URL}/webhooks/recall/status?token={WEBHOOK_TOKEN}`; Docker CMD uvicorn on `${PORT:-8000}`; agent-page/ outside build context → serve from backend/ (M2.1).
 
 ## Human tasks (Artem, in parallel — we build on respx mocks, ask only for live checks)
-- [ ] Supabase project (EU) + enable `vector` → `DATABASE_URL` (Session pooler, 5432)
+- [x] Supabase project (EU) + `vector`; migrate 001 applied 04:09
 - [ ] Railway project (EU), auto-deploy from main, root `backend/` → domain = `PUBLIC_BASE_URL`
 - [ ] Recall.ai API key (eu-central-1)
 - [ ] Slack app (SPEC "Konfiguracja Slack app"); Request URL after M3.2 is deployed
 - [ ] ElevenLabs voice id + OpenAI key
-- Live checks pending: SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
+- Live checks pending: SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 04:10 · M2.5b · orb signals wired (thinking/idle/ask/ask_done), ask layout persists while speaking (screenshot ok); cap lowered to 0.3 s after review; 154 tests · 9f8e73e
+- 04:09 · HUMAN · Supabase migrated (001 applied) after password reset (special chars broke DSN)
 - 04:08 · M2.5a · orb ported to canvas, 30 fps, ?demo/?state debug; review: orb failure must not mute agent → isolated, proven with orb.js blocked; 146 tests · ebb2b7c
 - 03:55 · M4.2 · postcall (idempotent, merges timeout items, bot.done + leave+5 s); 139 tests · 017c881
 - 03:55 · design · Artem sent orb animation → M2.5 added; source extracted to docs/design/agent-clips (decision 24)
