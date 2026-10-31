@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M6.1 /app/ws completeness, tokens, CORS (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: R2 Recall chat body (researcher) · waiting for Artem: M3.5 / M6.2 live runs — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -53,7 +53,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M5.2 KB update proposals + approve / reject
 
 ### M6 · Stabilize + demo (target 08:30)
-- [ ] M6.1 `/app/ws` all events, tokens, CORS
+- [x] M6.1 `/app/ws` all events (e2e test, real DB), tokens, CORS
 - [ ] M6.2 3 runs of the 90-s scenario on real Meet, latency measured, backup video by 09:30
 
 ## Research
@@ -82,6 +82,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 04:26 · M6.1 · CORS + e2e 7-event test (re-run by me on real pg: 3/3, timeout patch 3→8 s); 180 tests · 5e493ce
 - 04:24 · HUMAN · Railway /health ok (502 was Railway config)
 - 04:22 · M5.2 · proposals + approve/reject (transactional, 409 stale), + my guard old_text ≥ 10 chars; 177 tests · f57aab6
 - 04:19 · M5.1 · fact-check; review BLOCKER (source null in app) → kb_chunk_for_title, verified on real pg; 170 tests · a688278
