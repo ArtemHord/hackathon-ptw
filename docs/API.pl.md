@@ -33,6 +33,9 @@ Szczegóły rozmowy. Bez `since`: pełny obiekt. Z `since` (sekundy od początku
 ### POST /meetings/{id}/leave
 Bot wychodzi z rozmowy, backend uruchamia podsumowanie (asynchronicznie). Request: puste ciało. Response `200`: `{id, status: "done", summary_status: "processing"}`. Mock: `mocks/meeting_leave.json`.
 
+### POST /meetings/{id}/ask
+Zapasowy wyzwalacz (przycisk „Ask agent” na ekranie Live), gdy rozpoznawanie mowy nie usłyszało „Crew”. Request: `{"text": "..."}` (opcjonalne; bez `text` agent bierze ostatnią wypowiedź z rozmowy). Działa tylko w trybie `delegate` i gdy bot jest w rozmowie. Response `202`: `{id, accepted: true, question}`; odpowiedź agenta przychodzi zdarzeniem WS `agent_said` (albo `escalation_created`). Błędy: `404` nieznana rozmowa, `409` `not_delegate` / `not_in_call` / `busy`. Mock: `mocks/meeting_ask.json`. (Dodane po M0 za zgodą Artema, 05:10.)
+
 ### POST /chat
 Request: `{"question": "What is our API limit?"}`. Response `200`: `{answer, citations: [...]}`. Cytat to `{type: "meeting", meeting_id, ts, speaker, text}` (tap otwiera rozmowę na wypowiedzi `ts`) albo `{type: "document", doc_id, title, version}`. Mock: `mocks/chat.json`.
 
@@ -90,6 +93,7 @@ Karta eskalacji: `escalation_created` dodaje kartę o `id` (waiting), `escalatio
 | 2 | Nowa rozmowa | `POST /meetings` | `meeting_create.json` |
 | 3 | Live | `WS /app/ws`: `utterance`, `fact_check`, `escalation_created`, `escalation_answered` (też timeout), `agent_said`, `meeting_status`, `meeting_ended` | `ws_meeting_status.json`, `ws_escalation_timeout.json`, `ws_utterance.json`, `ws_fact_check.json`, `ws_escalation_created.json`, `ws_escalation_answered.json`, `ws_agent_said.json`, `ws_meeting_ended.json` |
 | 3 | Live (Wyjdź) | `POST /meetings/{id}/leave` | `meeting_leave.json` |
+| 3 | Live (Ask agent) | `POST /meetings/{id}/ask` | `meeting_ask.json` |
 | 3 | Live (fallback bez WS) | `GET /meetings/{id}?since=` | `meeting_detail.json` |
 | 4 | Szczegóły rozmowy | `GET /meetings/{id}` | `meeting_detail.json` |
 | 5 | Czat z agentem | `POST /chat` | `chat.json` |

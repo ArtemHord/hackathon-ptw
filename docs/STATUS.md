@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: — · waiting for Artem: Recall webhook, Slack URL + Dima email → LIVE TEST 1 → M3.5 / M6.2 — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: M6.3 wake word (senior-developer) · Artem: Slack setup — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -53,6 +53,9 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M5.2 KB update proposals + approve / reject
 
 ### M6 · Stabilize + demo (target 08:30)
+- [ ] M6.3 Robust wake word (fuzzy, first 3 tokens) + `/debug/ask` backup (senior-developer)
+- [ ] M6.4 `POST /meetings/{id}/ask` app endpoint (contract change approved 05:10; API.pl.md + mock done by orchestrator)
+- [ ] M6.5 Redact `token=` in uvicorn WS log lines (token leaked to Railway logs → rotate WEBHOOK_TOKEN)
 - [x] M6.1 `/app/ws` all events (e2e test, real DB), tokens, CORS
 - [ ] M6.2 3 runs of the 90-s scenario on real Meet, latency measured, backup video by 09:30
 
@@ -82,6 +85,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 05:07 · LIVE TEST 1 · Recall join OK (output_media+recording_config in one call ✓), agent page WS ✓, transcript ✓, status in_call/done ✓, fact-check ran ✓; FAIL: wake word ("Crew"→"cat"/"crap"); fix: PUBLIC_BASE_URL was missing in Railway · R3: key_terms not in low-latency → fuzzy trigger + ask endpoint (decision 26)
 - 04:28 · HUMAN · OpenAI key fixed; KB seeded on Supabase (api/roadmap/team v1)
 - 04:27 · R2 · Recall send_chat_message body confirmed; Meet 500-char cap → truncate · HUMAN: seed_kb failed, OPENAI_API_KEY wrong (key_… not sk-…)
 - 04:26 · M6.1 · CORS + e2e 7-event test (re-run by me on real pg: 3/3, timeout patch 3→8 s); 180 tests · 5e493ce
