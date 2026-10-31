@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M4.3a GET /meetings + GET /meetings/{id}?since= (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: M4.2 post-call pipeline (senior-developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -41,7 +41,8 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 ### M4 · Memory and chat (target 07:30)
 - [ ] M4.1 KB RAG on pgvector: `POST /kb/docs`, Acme seed, top-6 chunks in the prompt
 - [ ] M4.2 Post-call pipeline (summary, decisions, action items, facts)
-- [ ] M4.3 `GET /meetings`, `GET /meetings/{id}`, `POST /chat` with citations
+- [x] M4.3a `GET /meetings`, `GET /meetings/{id}?since=` (contract key sets asserted)
+- [ ] M4.3b `POST /chat` with citations (after M4.1)
 
 ### M5 · Fact-check (target 08:00, cut first)
 - [ ] M5.1 Live fact-check + message in the meeting chat
@@ -71,6 +72,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:52 · M4.3a · list + detail endpoints, real-DB tests (localhost-only guard added by me after review BLOCKER); 133 tests · 935de9e
 - 03:49 · M3.3b · fake notifier + debug reply endpoints + simulator flags; 128 tests · abd82d4 · M3 code complete, M3.5 waits on Artem
 - 03:45 · M3.3a · escalation loop: fast start, SQL first-reply-wins, timeout → spoken line + action item, late reply stored; 125 tests · 7864a9f
 - 03:39 · M3.2 · Slack adapter + webhook (raw-body HMAC, 300 s window, retry skip, event_id dedupe, bot filter); 113 tests · 23b2ff1
