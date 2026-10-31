@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M4.1 KB RAG on pgvector (senior-developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: M4.3b POST /chat with citations (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -43,7 +43,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [ ] M3.5 First end-to-end demo run (~06:15)
 
 ### M4 · Memory and chat (target 07:30)
-- [ ] M4.1 KB RAG on pgvector: `POST /kb/docs`, Acme seed, top-6 chunks in the prompt
+- [x] M4.1a KB RAG on pgvector: `GET/POST /kb/docs`, `rag.search`, `scripts/seed_kb.py`, backfill (orchestrator keeps full docs, decision 25)
 - [x] M4.2 Post-call pipeline (summary, decisions, action items, facts)
 - [x] M4.3a `GET /meetings`, `GET /meetings/{id}?since=` (contract key sets asserted)
 - [ ] M4.3b `POST /chat` with citations (after M4.1)
@@ -73,9 +73,10 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [ ] Recall.ai API key (eu-central-1)
 - [ ] Slack app (SPEC "Konfiguracja Slack app"); Request URL after M3.2 is deployed
 - [ ] ElevenLabs voice id + OpenAI key
-- Live checks pending: SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
+- Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 04:13 · M4.1a · KB API + RAG + seed; DB tests re-run by me on real pg (5/5); 159 tests · 304865e
 - 04:10 · M2.5b · orb signals wired (thinking/idle/ask/ask_done), ask layout persists while speaking (screenshot ok); cap lowered to 0.3 s after review; 154 tests · 9f8e73e
 - 04:09 · HUMAN · Supabase migrated (001 applied) after password reset (special chars broke DSN)
 - 04:08 · M2.5a · orb ported to canvas, 30 fps, ?demo/?state debug; review: orb failure must not mute agent → isolated, proven with orb.js blocked; 146 tests · ebb2b7c
