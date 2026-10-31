@@ -10,6 +10,7 @@ from app import (
     debug,
     escalation,
     hub,
+    kb,
     llm,
     meetings,
     speech,
@@ -40,6 +41,7 @@ meetings.install_error_handlers(app)
 app.include_router(meetings.router)
 app.include_router(webhooks_recall.router)
 app.include_router(webhooks_slack.router)
+app.include_router(kb.router)
 app.include_router(hub.router)
 app.include_router(agent_voice.router)
 app.include_router(speech.router)

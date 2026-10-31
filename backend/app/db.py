@@ -522,3 +522,117 @@ async def get_meeting_detail(meeting_id: str, since: int | None = None) -> dict[
         "escalations": [dict(r) for r in escs],
         "agent_said": [dict(r) for r in said],
     }
+
+
+# --- knowledge base / vector search ------------------------------------------
+
+
+def vec_literal(v: list[float]) -> str:
+    """pgvector text form; cast with ::vector in SQL (no codec needed)."""
+    return "[" + ",".join(repr(float(x)) for x in v) + "]"
+
+
+async def list_kb_docs() -> list[dict[str, Any]]:
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """select d.id, d.title, d.version, d.updated_at, d.created_at,
+                  (select count(*) from kb_chunks c where c.doc_id = d.id) as chunks
+           from kb_docs d order by d.created_at, d.title"""
+    )
+    return [dict(r) for r in rows]
+
+
+async def kb_doc_by_title(title: str) -> dict[str, Any] | None:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "select id, title, version, updated_at, created_at from kb_docs where title = $1", title
+    )
+    return dict(row) if row else None
+
+
+async def upsert_kb_doc(title: str, chunks: list[str], embeddings: list[list[float]]) -> dict:
+    """New doc -> version 1; existing title -> version + 1 and all its chunks replaced."""
+    pool = await get_pool()
+    async with pool.acquire() as conn, conn.transaction():
+        row = await conn.fetchrow(
+            "select id, version from kb_docs where title = $1 for update", title
+        )
+        if row:
+            doc_id, version = row["id"], row["version"] + 1
+            await conn.execute("delete from kb_chunks where doc_id = $1", doc_id)
+            await conn.execute(
+                "update kb_docs set version = $2, updated_at = now() where id = $1",
+                doc_id,
+                version,
+            )
+        else:
+            version = 1
+            doc_id = await conn.fetchval(
+                "insert into kb_docs (title, version) values ($1, 1) returning id", title
+            )
+        await conn.executemany(
+            "insert into kb_chunks (doc_id, text, embedding, version) "
+            "values ($1, $2, $3::vector, $4)",
+            [(doc_id, t, vec_literal(e), version) for t, e in zip(chunks, embeddings, strict=True)],
+        )
+        d = await conn.fetchrow(
+            "select id, title, version, updated_at from kb_docs where id = $1", doc_id
+        )
+    return {**dict(d), "chunks": len(chunks)}
+
+
+async def vector_search(qvec: list[float], k: int, kinds: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Cosine search (<=>) over kb_chunks / facts / utterances that have embeddings."""
+    parts: list[str] = []
+    if "kb" in kinds:
+        parts.append(
+            """(select 'kb' as kind, c.text, d.title as doc_title, null::text as meeting_id,
+                      null::real as ts, null::text as speaker,
+                      1 - (c.embedding <=> $1::vector) as score
+               from kb_chunks c join kb_docs d on d.id = c.doc_id
+               where c.embedding is not null order by c.embedding <=> $1::vector limit $2)"""
+        )
+    if "facts" in kinds:
+        parts.append(
+            """(select 'facts', f.text, null, f.meeting_id, null::real, f.speaker,
+                      1 - (f.embedding <=> $1::vector)
+               from facts f where f.embedding is not null
+               order by f.embedding <=> $1::vector limit $2)"""
+        )
+    if "utterances" in kinds:
+        parts.append(
+            """(select 'utterances', u.text, null, u.meeting_id, u.ts_start, u.speaker,
+                      1 - (u.embedding <=> $1::vector)
+               from utterances u where u.embedding is not null
+               order by u.embedding <=> $1::vector limit $2)"""
+        )
+    if not parts:
+        return []
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "select * from (" + " union all ".join(parts) + ") x order by score desc limit $2",
+        vec_literal(qvec),
+        k,
+    )
+    return [dict(r) for r in rows]
+
+
+async def rows_without_embedding(table: str, limit: int) -> list[dict[str, Any]]:
+    if table not in ("facts", "utterances"):
+        raise ValueError(table)
+    pool = await get_pool()
+    rows = await pool.fetch(
+        f"select id, text from {table} where embedding is null order by created_at limit $1",
+        limit,
+    )
+    return [dict(r) for r in rows]
+
+
+async def set_embeddings(table: str, items: list[tuple[str, list[float]]]) -> None:
+    if table not in ("facts", "utterances"):
+        raise ValueError(table)
+    pool = await get_pool()
+    await pool.executemany(
+        f"update {table} set embedding = $2::vector where id = $1",
+        [(i, vec_literal(v)) for i, v in items],
+    )

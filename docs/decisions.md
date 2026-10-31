@@ -4,6 +4,7 @@ Agents and `@codex review` check PRs against this file.
 
 | # | Decision | Why |
 |---|----------|-----|
+| 25 | Orchestrator keeps all KB docs in the prompt while total < 20k chars; pgvector top-6 only above that. RAG (`rag.search`) serves `/chat` and post-call | 3 small seed docs: full context is more accurate and saves a ~300 ms embedding call on the 3–5 s voice path |
 | 24 | Agent camera = designer orb (`docs/design/agent-clips/`), ported to vanilla JS in the agent page (no React/Babel in Recall's bot browser). Page states idle/listening/thinking/speaking + ask; server→page WS `state` / `ask` / `ask_done`; listening from page-mic level; plate shows "ASKING <EXPERT> ON SLACK" (design placeholder "YES, ATLAS" dropped) | Visible wow on stage; React + Babel standalone (3 MB) too heavy for the bot browser |
 | 23 | OpenAI called via plain httpx (`backend/app/llm.py`, `/v1/chat/completions`, strict json_schema), not the openai SDK; embeddings (M4.1) go through llm.py too | openai SDK 3.x uses httpx2, which respx does not intercept → tests hit the real API |
 | 22 | Agent page lives in `backend/agent_page/index.html` (not repo-root `agent-page/`), served at `GET /agent` | Railway build context = `backend/`; one image, no extra config |

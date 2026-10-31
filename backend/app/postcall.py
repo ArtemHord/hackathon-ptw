@@ -10,7 +10,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from app import db, hub, llm
+from app import db, hub, llm, rag
 
 log = logging.getLogger(__name__)
 
@@ -156,12 +156,13 @@ async def _run(meeting_id: str) -> None:
     updated = await db.update_meeting(
         meeting_id, summary=summary, decisions=decisions, action_items=items
     )
-    # HACK: facts stored with embedding null; M4.1 backfills embeddings.
+    # HACK: facts stored with embedding null; backfilled fire-and-forget below.
     for f in out.get("facts") or []:
         try:
             await db.insert_fact(meeting_id, f["speaker"], f["text"], f["kind"])
         except Exception:
             log.exception("postcall: insert_fact failed for %s", meeting_id)
+    rag.backfill_later()
     await hub.publish(
         meeting_id,
         "meeting_ended",

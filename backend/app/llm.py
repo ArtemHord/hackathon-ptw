@@ -79,3 +79,35 @@ async def chat_json(
     if not isinstance(data, dict):
         raise LLMError("OpenAI content is not a JSON object")
     return data
+
+
+EMBED_BATCH = 96
+
+
+async def embed(texts: list[str]) -> list[list[float]]:
+    """Embeddings (OPENAI_EMBED_MODEL), batched; same order as `texts`."""
+    s = get_settings()
+    if not (s.OPENAI_API_KEY and s.OPENAI_EMBED_MODEL):
+        raise LLMError("OpenAI is not configured (OPENAI_API_KEY / OPENAI_EMBED_MODEL)")
+    out: list[list[float]] = []
+    for i in range(0, len(texts), EMBED_BATCH):
+        batch = texts[i : i + EMBED_BATCH]
+        try:
+            r = await _http().post(
+                "/embeddings",
+                headers={"Authorization": f"Bearer {s.OPENAI_API_KEY}"},
+                json={"model": s.OPENAI_EMBED_MODEL, "input": batch},
+            )
+        except httpx.HTTPError as e:
+            raise LLMError(f"OpenAI request failed: {e.__class__.__name__}") from e
+        if r.status_code != 200:
+            raise LLMError(f"OpenAI returned {r.status_code}: {r.text[:200]}")
+        try:
+            data = sorted(r.json()["data"], key=lambda d: d["index"])
+            vecs = [[float(x) for x in d["embedding"]] for d in data]
+        except (ValueError, KeyError, TypeError) as e:
+            raise LLMError("OpenAI embeddings response malformed") from e
+        if len(vecs) != len(batch):
+            raise LLMError("OpenAI embeddings count mismatch")
+        out.extend(vecs)
+    return out
