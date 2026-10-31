@@ -1,0 +1,6 @@
+{
+  "items": [
+    {"id": "m_02", "title": "Weekly standup", "platform": "zoom", "mode": "notetaker", "status": "in_call", "live": true, "started_at": "2026-10-31T11:00:00Z", "duration_min": null},
+    {"id": "m_01", "title": "Q4 API sync", "platform": "google_meet", "mode": "delegate", "status": "done", "live": false, "started_at": "2026-10-31T09:00:00Z", "duration_min": 23}
+  ]
+}

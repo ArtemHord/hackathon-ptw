@@ -1,0 +1,11 @@
+{
+  "type": "agent_said",
+  "meeting_id": "m_01",
+  "ts": "2026-10-31T09:06:22Z",
+  "data": {
+    "id": "as_01",
+    "text": "Dima says: Yes, 15 min TTL.",
+    "ts": 382,
+    "in_reply_to": "esc_01"
+  }
+}

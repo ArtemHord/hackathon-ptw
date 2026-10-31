@@ -1,0 +1,6 @@
+{
+  "items": [
+    {"id": "kb_01", "title": "api.md", "version": 2, "updated_at": "2026-10-30T16:00:00Z", "chunks": 14, "versions": [{"version": 1, "updated_at": "2026-10-01T10:00:00Z"}, {"version": 2, "updated_at": "2026-10-30T16:00:00Z"}]},
+    {"id": "kb_02", "title": "roadmap.md", "version": 1, "updated_at": "2026-10-20T12:00:00Z", "chunks": 9, "versions": [{"version": 1, "updated_at": "2026-10-20T12:00:00Z"}]}
+  ]
+}

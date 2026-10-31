@@ -1,0 +1,73 @@
+{
+  "id": "m_01",
+  "title": "Q4 API sync",
+  "platform": "google_meet",
+  "mode": "delegate",
+  "status": "done",
+  "started_at": "2026-10-31T09:00:00Z",
+  "duration_min": 23,
+  "summary": "Team agreed to raise the API limit to 100 rps from Monday.",
+  "decisions": [
+    "Rate limit -> 100 rps from Monday (owner: Dima)"
+  ],
+  "action_items": [
+    {
+      "id": "ai_01",
+      "owner": "Artem",
+      "text": "Update SDK docs",
+      "due": "2026-11-03"
+    }
+  ],
+  "fact_checks": [
+    {
+      "id": "fc_01",
+      "claim": "limit is 100 rps",
+      "verdict": "contradicted",
+      "source": "api.md",
+      "correction": "50 rps",
+      "ts": 312,
+      "proposal_id": "kp_01"
+    }
+  ],
+  "escalations": [
+    {
+      "id": "esc_01",
+      "expert": "Dima",
+      "channel": "slack",
+      "question": "Can we cache auth tokens?",
+      "asked_by": "Julian",
+      "ts": 340,
+      "status": "answered",
+      "answer": "Yes, 15 min TTL",
+      "answered_ts": 380
+    }
+  ],
+  "utterances": [
+    {
+      "id": "u_01",
+      "speaker": "Julian",
+      "text": "Crew, what is our API limit?",
+      "ts": 305
+    },
+    {
+      "id": "u_02",
+      "speaker": "Julian",
+      "text": "Crew, can we cache auth tokens?",
+      "ts": 335
+    },
+    {
+      "id": "u_03",
+      "speaker": "Dima",
+      "text": "Yes, 15 min TTL",
+      "ts": 380
+    }
+  ],
+  "agent_said": [
+    {
+      "id": "as_01",
+      "text": "Dima says: Yes, 15 min TTL.",
+      "ts": 382,
+      "in_reply_to": "esc_01"
+    }
+  ]
+}

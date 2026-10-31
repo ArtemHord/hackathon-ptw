@@ -1,0 +1,8 @@
+{
+  "type": "meeting_status",
+  "meeting_id": "m_01",
+  "ts": "2026-10-31T09:00:20Z",
+  "data": {
+    "status": "in_call"
+  }
+}

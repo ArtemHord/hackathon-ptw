@@ -1,0 +1,14 @@
+{
+  "type": "fact_check",
+  "meeting_id": "m_01",
+  "ts": "2026-10-31T09:05:12Z",
+  "data": {
+    "id": "fc_01",
+    "claim": "limit is 100 rps",
+    "verdict": "contradicted",
+    "source": "api.md",
+    "correction": "50 rps",
+    "ts": 312,
+    "proposal_id": "kp_01"
+  }
+}

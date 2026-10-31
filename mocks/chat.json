@@ -1,0 +1,25 @@
+{
+  "answer": "The API limit is 50 rps today. In the Q4 API sync the team agreed to raise it to 100 rps from Monday, and Dima confirmed that auth tokens can be cached for 15 minutes.",
+  "citations": [
+    {
+      "type": "meeting",
+      "meeting_id": "m_01",
+      "ts": 305,
+      "speaker": "Julian",
+      "text": "Crew, what is our API limit?"
+    },
+    {
+      "type": "meeting",
+      "meeting_id": "m_01",
+      "ts": 380,
+      "speaker": "Dima",
+      "text": "Yes, 15 min TTL"
+    },
+    {
+      "type": "document",
+      "doc_id": "kb_01",
+      "title": "api.md",
+      "version": 2
+    }
+  ]
+}

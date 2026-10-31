@@ -1,0 +1,16 @@
+{
+  "type": "escalation_answered",
+  "meeting_id": "m_01",
+  "ts": "2026-10-31T09:07:40Z",
+  "data": {
+    "id": "esc_01",
+    "expert": "Dima",
+    "channel": "slack",
+    "question": "Can we cache auth tokens?",
+    "asked_by": "Julian",
+    "ts": 340,
+    "status": "timeout",
+    "answer": null,
+    "answered_ts": null
+  }
+}
