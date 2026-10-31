@@ -364,6 +364,32 @@ struct ExpertDTO: Decodable, Sendable {
     }
 }
 
+/// A change to the knowledge base proposed by a fact-check; a human approves or rejects it
+struct ProposalDTO: Decodable, Sendable, Identifiable {
+    let id: String
+    let doc_title: String?
+    let status: String?
+    let meeting_id: String?
+    let speaker: String?
+    let reason: String?
+    let old_text: String?
+    let new_text: String?
+
+    private enum CodingKeys: String, CodingKey { case id, doc_title, status, meeting_id, speaker, reason, old_text, new_text }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.id(.id)
+        doc_title = c.text(.doc_title)
+        status = c.text(.status)
+        meeting_id = c.text(.meeting_id)
+        speaker = c.text(.speaker)
+        reason = c.text(.reason)
+        old_text = c.text(.old_text)
+        new_text = c.text(.new_text)
+    }
+}
+
 struct ChatResponseDTO: Decodable, Sendable {
     struct Citation: Decodable, Sendable {
         let type: String
@@ -421,6 +447,18 @@ struct BackendClient: Sendable {
         struct List: Decodable { let items: LossyList<ExpertDTO> }
         let list: List = try await request("GET", "/experts")
         return list.items.items
+    }
+
+    /// Pending knowledge-base proposals (`GET /kb/proposals`)
+    func proposals() async throws -> [ProposalDTO] {
+        struct List: Decodable { let items: LossyList<ProposalDTO> }
+        let list: List = try await request("GET", "/kb/proposals")
+        return list.items.items
+    }
+
+    /// `POST /kb/proposals/{id}/approve` or `/reject`
+    func decide(proposal id: String, approve: Bool) async throws {
+        let _: EmptyResponse = try await request("POST", "/kb/proposals/\(id)/\(approve ? "approve" : "reject")")
     }
 
     func chat(_ question: String) async throws -> ChatResponseDTO {

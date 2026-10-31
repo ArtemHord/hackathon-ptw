@@ -176,7 +176,7 @@ struct Message: Identifiable, Hashable {
 }
 
 enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
-    case calendar, projects, people, tasks
+    case calendar, projects, people, tasks, knowledge
 
     var id: Self { self }
     var title: String { rawValue.capitalized }
@@ -187,6 +187,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .projects: "folder"
         case .people: "person.2"
         case .tasks: "checklist"
+        case .knowledge: "book"
         }
     }
 }

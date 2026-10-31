@@ -16,6 +16,7 @@ struct SectionScreen: View {
                 case .projects: ProjectsList(store: store)
                 case .people: PeopleList(store: store)
                 case .tasks: TasksList(store: store)
+                case .knowledge: ProposalsList(store: store)
                 }
             }
             .listStyle(.plain)
@@ -212,7 +213,7 @@ private struct ListHeader: View {
 }
 
 /// A centered placeholder inside a list
-private struct EmptyState: View {
+struct EmptyState: View {
     let title: String
     let icon: String
     let text: String
