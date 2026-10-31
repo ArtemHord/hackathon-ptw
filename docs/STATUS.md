@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress (10:00): M10.1 Atlas prompt + own answers (senior-developer) · checkpoint 10:15 (not in review → abort) · LAST PUSH 10:25 (Julian confirms no bot in call) · no Railway var changes after 10:25 · then demo runs + backup video only
+- In progress (10:16): M10.1 + PR #4 pushed (31ef6d5) · profile acme · now ONLY demo runs + backup video; no pushes, no Railway var changes; freeze 11:00
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -110,6 +110,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 10:16 · push · 31ef6d5 (M10.1 + PR #4) after Artem: no bot in call; demo profile = acme · Railway deploying
 - 10:13 · merge · origin/main (Julian PR #4: profiles acme/msp, ask-by-name) + M10.1; orchestrator conflict resolved (both kept); 374 tests, ruff, mini smoke ok; review no blockers · local; push waits for "no bot in call" (≤10:25). DEMO.md: delete stored Postgres-17 answer facts before each run
 - 10:16 · M10.1 · review: no blockers (333 tests, ruff) · local commit; push waits for Julian "no bot in call" (deadline 10:25)
 - 10:09 · M10.1 · built: Postgres 17 escalates 5/5 (tools) + 5/5 (no tools); "Friday" → owner; rate limit 50 rps no web; Python → web_search 3.6 s; Canberra 1.7 s; follow-up "and why" ok; non-escalation 1.7–4.0 s; 333 tests · in review (before 10:15 checkpoint) · —
