@@ -4,7 +4,19 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import agent_voice, db, escalation, hub, llm, meetings, speech, tts, webhooks_recall
+from app import (
+    agent_voice,
+    db,
+    escalation,
+    hub,
+    llm,
+    meetings,
+    speech,
+    tts,
+    webhooks_recall,
+    webhooks_slack,
+)
+from app.notifier import slack as _slack  # noqa: F401  registers the "slack" notifier
 
 # app.* INFO lines (e.g. the orchestrator latency log) are invisible under uvicorn otherwise.
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -26,6 +38,7 @@ app = FastAPI(title="Call Crew", lifespan=lifespan)
 meetings.install_error_handlers(app)
 app.include_router(meetings.router)
 app.include_router(webhooks_recall.router)
+app.include_router(webhooks_slack.router)
 app.include_router(hub.router)
 app.include_router(agent_voice.router)
 app.include_router(speech.router)

@@ -75,3 +75,10 @@ async def seed_experts() -> None:
         await load_experts(refresh=True)
     except Exception as e:
         log.warning("expert seed failed: %s", e)
+
+
+async def on_expert_reply(channel_id: str, thread_ts: str, text: str, user_id: str) -> None:
+    """Slack thread reply from an expert. Stub: M3.3 finds the escalation by thread_ts."""
+    log.info(
+        "expert reply in %s thread %s from %s (%d chars)", channel_id, thread_ts, user_id, len(text)
+    )
