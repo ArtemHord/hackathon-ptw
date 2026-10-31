@@ -1,0 +1,7 @@
+# Local settings with the demo token and optional keys, wherever the copy lands — never commit
+Secrets.env
+# Xcode per-user state and build output
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
