@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: E2E — verifier local run (hero + tools a–f); Artem: prod integrations all unset (Slack/Telegram/Jira) → setup in /ui, then live checklist docs/DEMO.md
+- In progress (09:01): prod has NO Slack/Jira/Telegram config, experts = example.com, history seed not on prod → Artem: Slack setup + seed_kb/seed_history on Supabase → M3.5 live; then 3 demo runs + backup video; freeze 11:00
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -106,6 +106,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 09:01 · status check · prod healthy after 9c459f5 deploy; integrations all unconfigured; 0 hist meetings on prod; live bot in meeting "dev" · —
 - 08:57 · push · M8.1b + M9.1 + SCENARIOS.md on main (9c459f5), Artem OK · Railway deploying; next: Artem seeds Supabase (seed_kb + seed_history)
 - 08:50 · M9.1 · local: S3 "10 % off December" 4.5 s via search_knowledge; S4 three keys 3.1 s; Postgres 17 still escalates; sim RESULT OK; 329 tests · local commit; Artem: push + seed_kb.py + seed_history.py on Supabase
 - 08:46 · M9.0 · docs/SCENARIOS.md written; M9.1 seed history → developer · —
