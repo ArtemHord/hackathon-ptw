@@ -88,6 +88,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 07:15 · PR #1 review · no blockers; 308 tests, ruff, docker build OK; starts without migration 002 (env fallback); contract changes additive (action_items jira_key/jira_url, /settings, /integrations, /experts, action-item→Jira) → needs Artem OK · —
 - 07:10 · M8.1 · tool calling (web_search + search_knowledge + create_doc) → senior-developer in worktree ../hackathon-ptw-m8 (branch m8-agent-tools on PR #1 tip); PR #1 (Julian, M7 /ui + Telegram + Jira) → reviewer · —
 - 07:05 · M7 · Artem: add tool calling (web search, research, docs creation) for Atlas; researcher on OpenAI Responses web_search; Julian email unread (Chrome extension not connected) · —
 - 06:11 · M3.5 · Railway has no SLACK_* vars, experts.json emails are placeholders → human gate, steps sent to Artem · —
