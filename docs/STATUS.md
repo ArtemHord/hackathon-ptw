@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M4 verifier ‖ M5.1 fact-check next — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: M5.1 live fact-check (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: Railway 502 (target port / root dir — Artem) · M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -76,6 +76,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 04:17 · M4 verify · PASS: list/detail keys = mocks, ?since filters, /chat fallback, /kb/docs, 401s · item keys of empty arrays covered by M4.3a real-DB tests
 - 04:16 · M4.3b · /chat RAG + citations; review demo nits fixed (Dima cited at answered_ts=380 verified on real pg, fact embedded on reply); 163 tests · d8000be
 - 04:16 · HUMAN · Railway domain https://hackathon-ptw-production.up.railway.app → 502; local image OK with PORT → Railway config (target port/root dir)
 - 04:13 · M4.1a · KB API + RAG + seed; DB tests re-run by me on real pg (5/5); 159 tests · 304865e
