@@ -10,3 +10,32 @@ __pycache__/
 .DS_Store
 .playwright-mcp/
 backend/web/dist/
+
+# Build output and logs (Xcode builds into ./build and bundles ios Secrets.env into the .app)
+build/
+DerivedData/
+*.log
+
+# Secrets and key material
+Secrets.env
+*.pem
+*.key
+*.p12
+*.p8
+*.mobileprovision
+service-account*.json
+GoogleService-Info.plist
+google-services.json
+
+# Database dumps and local databases (migrations in backend/migrations/*.sql stay tracked)
+*.dump
+*.sql.gz
+*.bak
+*.sqlite
+*.sqlite3
+*.db
+
+# iOS release artifacts
+*.ipa
+*.xcarchive/
+*.dSYM/
