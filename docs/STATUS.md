@@ -3,8 +3,8 @@
 Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
-- Milestone: M2
-- In progress: M2.3b orchestrator "Crew" → LLM → voice (senior-developer)
+- Milestone: M3 (HERO)
+- In progress: M2 verifier (port 8100) ‖ M3.1 Notifier + expert matching (developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -23,12 +23,12 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M1.3 Bot status webhook
 - [x] M1.4 `scripts/simulate_meeting.py` + demo-scenario fixture
 
-### M2 · Agent speaks (target 05:30)
+### M2 · Agent speaks (target 05:30) — DONE 03:34 (live voice + real LLM latency pending keys)
 - [x] M2.1 Agent page + `/agent-page/ws`; a test phrase is audible in the call
 - [x] M2.2 ElevenLabs TTS + `POST /tts` + cached "One sec…"
 - [x] M2.3a Seed docs `backend/seed/{api,roadmap,team}.md` (developer)
-- [ ] M2.3b Name trigger "Crew" → LLM (brief + docs in prompt) → voice; measure latency (senior-developer)
-- [ ] M2.4 Delegate brief — merged into M2.3b (brief in system prompt + "no commitments for owner" rule)
+- [x] M2.3b Name trigger "Crew" → LLM (brief + docs in prompt) → voice; measure latency (senior-developer)
+- [x] M2.4 Delegate brief — merged into M2.3b (brief in system prompt + "no commitments for owner" rule)
 
 ### M3 · Slack escalation — HERO (target 06:30)
 - [ ] M3.1 `Notifier` interface + expert matching
@@ -57,6 +57,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Contract FROZEN after M0: `docs/API.pl.md` + `mocks/` (17). Changes = Artem gate. One escalation shape {id, expert, channel, question, asked_by, ts, status waiting|answered|timeout, answer, answered_ts}; timeout = `escalation_answered` with status timeout. WS envelope {type, meeting_id, ts ISO, data}; data.ts = seconds from call start. 7 WS events incl. `meeting_status`.
 - DB: `001_init.sql`, text ids (uuid), `utterances` dedup → `INSERT … ON CONFLICT (meeting_id, speaker, ts_start) DO NOTHING`; Slack reply lookup `escalations.external_msg_id`. `agent_said` table for poll mode.
 - Recall/Slack facts: `docs/decisions.md` #13–20 (one bot create with output_media + recording_config, `recallai_streaming` prioritize_low_latency; status via dashboard webhook, post-call on `bot.done`; Slack v0 HMAC, ignore bot_id/bot_message, dedupe event_id).
+- Orchestrator: `orchestrator.on_needs_expert(meeting_id, question, topic, asked_by)` hook (M3 replaces; may return name or {expert, escalation_id}); OpenAI via httpx in llm.py (decision 23); latency log line "crew latency".
 - Run: `cd backend && uv run pytest -q`; simulate: `cd backend && DATABASE_URL=… WEBHOOK_TOKEN=… DEMO_TOKEN=… uv run python ../scripts/simulate_meeting.py --speed 20` (needs running backend + DB; exit 1 if utterance events != unique lines); Recall status dashboard URL `{PUBLIC_BASE_URL}/webhooks/recall/status?token={WEBHOOK_TOKEN}`; Docker CMD uvicorn on `${PORT:-8000}`; agent-page/ outside build context → serve from backend/ (M2.1).
 
 ## Human tasks (Artem, in parallel — we build on respx mocks, ask only for live checks)
@@ -68,6 +69,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:34 · M2.3b+M2.4 · orchestrator: aliases, delegate-only, speaking guard, lock, 1.5 s filler, strict JSON, no-commitment rule, agent_said; 82 tests · b9ce17b
 - 03:28 · M2.3a · seed docs; review caught token-lifetime leak (would answer the cache escalation) → removed · bd3eb95
 - 03:27 · M2.2 · tts.py (flash model via env), /tts, filler cache, say(); 47 tests · 318458e
 - 03:25 · M2.1 · /agent page + WS play/tone, is_speaking w/ 90 s TTL; 1 review round (stuck flag); 38 tests · 2b58ac6
