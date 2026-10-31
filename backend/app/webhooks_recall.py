@@ -15,15 +15,18 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, hub
+from app import db, hub, runtime
 from app.config import get_settings
 from app.meetings import error_response
 
 log = logging.getLogger(__name__)
 
-# Our bot joins as "<AGENT_NAME> (AI) for Artem" (recall.BOT_NAME); "call crew" = legacy name.
-BOT_MARKER = f"{get_settings().AGENT_NAME} (AI)".lower()
-BOT_MARKERS = (BOT_MARKER, "call crew")
+
+def bot_markers() -> tuple[str, ...]:
+    """Our bot joins as "<AGENT_NAME> (AI) for <OWNER_NAME>" (recall.bot_name());
+    "call crew" = legacy name."""
+    return (f"{runtime.get('AGENT_NAME')} (AI)".lower(), "call crew")
+
 
 router = APIRouter()
 
@@ -41,7 +44,7 @@ def _spawn(coro) -> asyncio.Task:
 def is_bot_speaker(name: str | None) -> bool:
     """True for our own bot's voice (SPEC "Ryzyka": agent reacting to itself)."""
     low = (name or "").lower()
-    return any(marker in low for marker in BOT_MARKERS)
+    return any(marker in low for marker in bot_markers())
 
 
 def _token_ok(token: str | None) -> bool:

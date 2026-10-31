@@ -6,11 +6,11 @@ from urllib.parse import urlencode
 
 import httpx
 
-from app.config import get_settings
+from app import runtime
+from app.config import get_settings, keyterms_for
 
 log = logging.getLogger(__name__)
 
-BOT_NAME = f"{get_settings().AGENT_NAME} (AI) for Artem"  # HACK: owner name
 WAITING_ROOM_TIMEOUT_S = 600
 TIMEOUT = httpx.Timeout(20.0)
 
@@ -22,6 +22,16 @@ class RecallError(Exception):
         super().__init__(message)
         self.status = status
         self.body = body
+
+
+def bot_name() -> str:
+    """Display name in the call; webhooks_recall.bot_markers() must still match it."""
+    return f"{runtime.get('AGENT_NAME')} (AI) for {runtime.get('OWNER_NAME')}"
+
+
+def keyterms() -> list[str]:
+    """Deepgram keyterm boost built from the runtime agent name + env extras."""
+    return keyterms_for(runtime.get("AGENT_NAME"), get_settings().TRANSCRIPT_EXTRA_KEYTERMS)
 
 
 def _base() -> str:
@@ -50,7 +60,7 @@ def _transcript_provider(provider: str) -> dict[str, Any]:
             "deepgram_streaming": {
                 "model": "nova-3",
                 "language": "en",
-                "keyterm": get_settings().transcript_keyterms,
+                "keyterm": keyterms(),
                 # Deepgram default 10 ms splits "Okay Atlas," from the question
                 "endpointing": 300,
             }
@@ -65,7 +75,7 @@ def build_bot_body(
     provider = provider or get_settings().TRANSCRIPT_PROVIDER
     return {
         "meeting_url": meeting_url,
-        "bot_name": BOT_NAME,
+        "bot_name": bot_name(),
         "output_media": {
             "camera": {
                 "kind": "webpage",

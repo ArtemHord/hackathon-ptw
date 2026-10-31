@@ -21,6 +21,7 @@ from app.main import app
 
 MOCKS = Path(__file__).resolve().parents[2] / "mocks"
 MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "001_init.sql"
+MIGRATION_SETTINGS = Path(__file__).resolve().parents[1] / "migrations" / "002_settings.sql"
 URL = os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:pw@localhost:55443/postgres")
 # SAFETY: the fixture drops the public schema; never run against a non-local DB.
 if urlsplit(URL).hostname not in ("localhost", "127.0.0.1"):
@@ -67,6 +68,7 @@ def client(monkeypatch):
         c = await asyncpg.connect(URL)
         await c.execute("drop schema public cascade; create schema public;")
         await c.execute(MIGRATION.read_text())
+        await c.execute(MIGRATION_SETTINGS.read_text())
         t0 = datetime(2026, 10, 31, 9, 0, tzinfo=UTC)
         await c.execute(
             """insert into meetings (id,title,platform,mode,status,started_at,ended_at,summary,

@@ -35,6 +35,18 @@ MEETING_UPDATABLE = {
     "action_items",
 }
 
+EXPERT_COLUMNS = """id, name, coalesce(role,'') as role, topics, channel, email,
+   slack_user_id, telegram_chat_id, ('owner' = any(topics)) as is_owner"""
+EXPERT_UPDATABLE = (
+    "name",
+    "role",
+    "topics",
+    "channel",
+    "email",
+    "slack_user_id",
+    "telegram_chat_id",
+)
+
 
 def _split_ssl(url: str) -> tuple[str, Any]:
     """Return (url without sslmode, ssl arg for asyncpg). Same logic as scripts/migrate.py."""
@@ -282,12 +294,80 @@ async def upsert_experts(experts: list[dict[str, Any]]) -> None:
 
 async def list_experts() -> list[dict[str, Any]]:
     pool = await get_pool()
-    rows = await pool.fetch(
-        """select id, name, coalesce(role,'') as role, topics, channel, email,
-           slack_user_id, telegram_chat_id, ('owner' = any(topics)) as is_owner
-           from experts order by created_at, name"""
-    )
+    rows = await pool.fetch(f"select {EXPERT_COLUMNS} from experts order by created_at, name")
     return [dict(r) for r in rows]
+
+
+async def get_expert(expert_id: str) -> dict[str, Any] | None:
+    pool = await get_pool()
+    row = await pool.fetchrow(f"select {EXPERT_COLUMNS} from experts where id = $1", expert_id)
+    return dict(row) if row else None
+
+
+async def insert_expert(e: dict[str, Any]) -> dict[str, Any]:
+    """Owner = "owner" in topics (no is_owner column), as in upsert_experts."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"""insert into experts (name, role, topics, channel, email, slack_user_id,
+           telegram_chat_id) values ($1,$2,$3,$4,$5,$6,$7) returning {EXPERT_COLUMNS}""",
+        e["name"],
+        e.get("role") or "",
+        list(e.get("topics") or []),
+        e.get("channel") or "slack",
+        e.get("email"),
+        e.get("slack_user_id"),
+        e.get("telegram_chat_id"),
+    )
+    return dict(row)
+
+
+async def update_expert(expert_id: str, **fields: Any) -> dict[str, Any] | None:
+    cols = {k: v for k, v in fields.items() if k in EXPERT_UPDATABLE}
+    if not cols:
+        return await get_expert(expert_id)
+    sets = ", ".join(f"{k} = ${i}" for i, k in enumerate(cols, start=2))
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"update experts set {sets} where id = $1 returning {EXPERT_COLUMNS}",
+        expert_id,
+        *cols.values(),
+    )
+    return dict(row) if row else None
+
+
+async def delete_expert(expert_id: str) -> bool:
+    pool = await get_pool()
+    status = await pool.execute("delete from experts where id = $1", expert_id)
+    return not status.endswith(" 0")
+
+
+async def count_experts() -> int:
+    pool = await get_pool()
+    return int(await pool.fetchval("select count(*) from experts"))
+
+
+# --- app_settings (runtime overrides, M7.1) ------------------------------------
+
+
+async def list_settings() -> dict[str, str]:
+    pool = await get_pool()
+    rows = await pool.fetch("select key, value from app_settings")
+    return {r["key"]: r["value"] for r in rows}
+
+
+async def upsert_setting(key: str, value: str) -> None:
+    pool = await get_pool()
+    await pool.execute(
+        """insert into app_settings (key, value, updated_at) values ($1, $2, now())
+           on conflict (key) do update set value = excluded.value, updated_at = now()""",
+        key,
+        value,
+    )
+
+
+async def delete_setting(key: str) -> None:
+    pool = await get_pool()
+    await pool.execute("delete from app_settings where key = $1", key)
 
 
 async def get_last_utterances(meeting_id: str, n: int = 3) -> list[dict[str, Any]]:

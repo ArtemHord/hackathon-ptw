@@ -15,6 +15,8 @@ from app import (
     kb,
     llm,
     meetings,
+    runtime,
+    settings_api,
     speech,
     tts,
     webhooks_recall,
@@ -32,6 +34,7 @@ async def lifespan(app: FastAPI):
     warm = asyncio.create_task(tts.warm_filler())  # no-op without ELEVENLABS_API_KEY
     try:
         async with db.lifespan(app):
+            await runtime.load()  # UI-edited settings over env, before anything reads them
             await escalation.seed_experts()
             yield
     finally:
@@ -44,7 +47,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in get_settings().CORS_ORIGINS.split(",") if o.strip()] or ["*"],
     allow_credentials=False,  # auth is a Bearer header, not cookies
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 meetings.install_error_handlers(app)
@@ -56,6 +59,7 @@ app.include_router(chat.router)
 app.include_router(hub.router)
 app.include_router(agent_voice.router)
 app.include_router(speech.router)
+app.include_router(settings_api.router)
 app.include_router(debug.router)  # HACK: offline escalation driver
 
 

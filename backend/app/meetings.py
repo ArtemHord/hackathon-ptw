@@ -45,15 +45,20 @@ def install_error_handlers(app: FastAPI) -> None:
 # --- auth ---------------------------------------------------------------------
 
 
-async def require_demo_token(authorization: str | None = Header(default=None)) -> None:
-    """`Authorization: Bearer <DEMO_TOKEN>`; reusable for every app endpoint."""
+def demo_token_ok(authorization: str | None) -> bool:
+    """`Authorization: Bearer <DEMO_TOKEN>` matches (constant-time)."""
     expected = get_settings().DEMO_TOKEN
     scheme, _, token = (authorization or "").partition(" ")
-    if (
-        not expected
-        or scheme.lower() != "bearer"
-        or not secrets.compare_digest(token.strip().encode(), expected.encode())
-    ):
+    return (
+        bool(expected)
+        and scheme.lower() == "bearer"
+        and secrets.compare_digest(token.strip().encode(), expected.encode())
+    )
+
+
+async def require_demo_token(authorization: str | None = Header(default=None)) -> None:
+    """`Authorization: Bearer <DEMO_TOKEN>`; reusable for every app endpoint."""
+    if not demo_token_ok(authorization):
         raise ApiError(401, "unauthorized", "Missing or invalid token")
 
 
@@ -77,6 +82,10 @@ def detect_platform(meeting_url: str) -> str | None:
 
 def iso(dt: datetime | None) -> str | None:
     return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ") if dt else None
+
+
+class AskBody(BaseModel):
+    text: str | None = None
 
 
 class MeetingCreate(BaseModel):
@@ -142,6 +151,30 @@ async def leave_meeting(meeting_id: str) -> dict[str, Any]:
 
     postcall.schedule_after_leave(meeting_id)
     return {"id": meeting_id, "status": "done", "summary_status": "processing"}
+
+
+@router.post("/meetings/{meeting_id}/ask", status_code=202)
+async def ask_agent(meeting_id: str, body: AskBody | None = None) -> dict[str, Any]:
+    """Backup trigger ("Ask agent" on Live): runs the answer flow without the wake word.
+    The answer arrives as WS `agent_said` (or `escalation_created`)."""
+    from app import orchestrator  # lazy: orchestrator -> speech -> meetings (cycle)
+    from app.webhooks_recall import _spawn
+
+    m = await db.get_meeting(meeting_id)
+    if m is None:
+        raise ApiError(404, "not_found", f"Meeting {meeting_id} not found")
+    if m.get("mode") != "delegate":
+        raise ApiError(409, "not_delegate", "The agent only answers in delegate mode")
+    if m.get("status") != "in_call":
+        raise ApiError(409, "not_in_call", "The bot is not in the call")
+    if orchestrator.is_busy(meeting_id):
+        raise ApiError(409, "busy", "The agent is already answering")
+    asked = await orchestrator.manual_question(meeting_id, body.text if body else None)
+    if asked is None:
+        raise ApiError(404, "not_found", "No utterance to answer")
+    utterance, question = asked
+    _spawn(orchestrator.ask(meeting_id, utterance, question))  # 202 now, voice follows
+    return {"id": meeting_id, "accepted": True, "question": question}
 
 
 # --- read endpoints (screens 1, 3-fallback, 4) -----------------------------------

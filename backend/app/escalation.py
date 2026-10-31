@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, hub, recall, speech
+from app import agent_voice, db, hub, recall, runtime, speech
 from app.config import get_settings
 from app.notifier.base import Expert, SentMessage, get_notifier
 
@@ -88,11 +88,13 @@ async def load_experts(refresh: bool = False) -> list[Expert]:
 
 
 async def seed_experts() -> None:
-    """HACK: upsert seed/experts.json at startup, only when DATABASE_URL is set."""
+    """HACK: seed/experts.json at startup, only with DATABASE_URL and an empty experts table
+    (experts are edited in the web UI since M7.1; reseeding would overwrite those edits)."""
     if not get_settings().DATABASE_URL:
         return
     try:
-        await db.upsert_experts(json.loads(SEED_PATH.read_text())["experts"])
+        if await db.count_experts() == 0:
+            await db.upsert_experts(json.loads(SEED_PATH.read_text())["experts"])
         await load_experts(refresh=True)
     except Exception as e:
         log.warning("expert seed failed: %s", e)
@@ -100,7 +102,7 @@ async def seed_experts() -> None:
 
 def _notifier_for(channel: str):
     """HACK: without SLACK_BOT_TOKEN, slack experts go to the fake notifier (offline demo/tests)."""
-    if channel == "slack" and not get_settings().SLACK_BOT_TOKEN:
+    if channel == "slack" and not runtime.get("SLACK_BOT_TOKEN"):
         from app.notifier import fake  # noqa: F401  registers "fake"
 
         return get_notifier("fake")

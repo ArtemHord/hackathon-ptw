@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from app.config import get_settings
+from app import runtime
 from app.notifier.base import Expert, NotifierError, SentMessage, register_notifier
 
 __all__ = ["SLACK", "NotifierError", "SlackNotifier", "format_question"]
@@ -58,7 +58,7 @@ class SlackNotifier:
     async def _call(
         self, method: str, *, json: dict[str, Any] | None = None, params: dict | None = None
     ) -> dict[str, Any]:
-        token = get_settings().SLACK_BOT_TOKEN
+        token = runtime.get("SLACK_BOT_TOKEN")
         if not token:
             raise NotifierError("SLACK_BOT_TOKEN is not set")
         headers = {"Authorization": f"Bearer {token}"}
@@ -75,6 +75,12 @@ class SlackNotifier:
         if not isinstance(data, dict) or not data.get("ok"):
             err = data.get("error") if isinstance(data, dict) else "bad response"
             raise NotifierError(f"slack {method}: {err}")
+        return data
+
+    async def auth_test(self) -> dict[str, Any]:
+        """auth.test: {user_id, user, team, ...}; raises NotifierError (integration test)."""
+        data = await self._call("auth.test")
+        self._bot_user_id = data.get("user_id") or self._bot_user_id
         return data
 
     async def bot_user_id(self) -> str | None:
@@ -109,17 +115,23 @@ class SlackNotifier:
         question: str,
         context_lines: list[str],
     ) -> SentMessage:
-        user_id = await self.resolve_user(expert)
-        opened = await self._call("conversations.open", json={"users": user_id})
-        channel = (opened.get("channel") or {}).get("id")
-        if not channel:
-            raise NotifierError("conversations.open: no channel id")
         text = format_question(
             meeting_title=meeting_title,
             asked_by=asked_by,
             question=question,
             context_lines=context_lines,
         )
+        return await self._dm(expert, text)
+
+    async def send_text(self, expert: Expert, text: str) -> SentMessage:
+        return await self._dm(expert, text)
+
+    async def _dm(self, expert: Expert, text: str) -> SentMessage:
+        user_id = await self.resolve_user(expert)
+        opened = await self._call("conversations.open", json={"users": user_id})
+        channel = (opened.get("channel") or {}).get("id")
+        if not channel:
+            raise NotifierError("conversations.open: no channel id")
         posted = await self._call("chat.postMessage", json={"channel": channel, "text": text})
         ts = posted.get("ts")
         if not ts:

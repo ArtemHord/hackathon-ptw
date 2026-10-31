@@ -43,6 +43,10 @@ class Notifier(Protocol):
         """Thread note, e.g. "Thanks, passed it on"."""
         ...
 
+    async def send_text(self, expert: Expert, text: str) -> SentMessage:
+        """Plain direct message, e.g. the "Send test" button in the web UI."""
+        ...
+
 
 NOTIFIERS: dict[str, Notifier] = {}
 
