@@ -4,25 +4,26 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M0
-- In progress: —
+- In progress: M0.1 (review)
 - Blocked: —
 
-## Plan (SPEC "Plan do freeze o 11:00")
-Cut rules: escalation not end-to-end by 06:30 → drop M5. After 08:30 → bug fixes only. 11:00 → freeze.
+## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
+Cut rules: escalation not end-to-end by 06:30 → drop M5. After 08:30 → bug fixes only. 11:00 → freeze. If M2 not done by 05:30 → start M3 anyway.
+Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack + Recall webhooks point there; ngrok only as fallback for live debugging. During demo runs and after 08:30: no push to main without Artem's OK (deploy wipes in-memory WS hub + active escalations).
 
-### M0 · Fundament (target 02:45)
-- [ ] M0.1 Backend skeleton: uv, FastAPI, `/health`, config, ruff, pytest, `.env.example`, README
-- [ ] M0.2 API contract: `docs/API.pl.md` + `mocks/*.json` (Misha needs it for the app)
-- [ ] M0.3 Supabase migrations (all tables + `vector`) + `scripts/migrate.py`
-- [ ] M0.4 Dockerfile + Railway deploy (EU), `PUBLIC_BASE_URL` (HUMAN: Railway project)
+### M0 · Fundament (target 03:45) — order M0.1 → M0.2 → M0.4 → M0.3
+- [ ] M0.1 Backend skeleton: uv, FastAPI, `/health`, config (all SPEC env vars), ruff, pytest, root `.env.example`
+- [ ] M0.2 API contract: `docs/API.pl.md` + `mocks/*.json` incl. `/app/ws` events (Misha blocked on it)
+- [ ] M0.4 `backend/Dockerfile` (uvicorn on `0.0.0.0:${PORT:-8000}`), Railway root `backend/`, healthcheck `/health`
+- [ ] M0.3 Migrations `001_init.sql` (all tables + `vector`) + `scripts/migrate.py` (idempotent; Supabase Session pooler 5432)
 
-### M1 · Agent in the call (target 03:30)
+### M1 · Agent in the call (target 04:30)
 - [ ] M1.1 Recall client, `POST /meetings`, `POST /meetings/{id}/leave`; bot joins Google Meet
 - [ ] M1.2 Transcript webhook → `utterances`, dedup, WS event
 - [ ] M1.3 Bot status webhook
 - [ ] M1.4 `scripts/simulate_meeting.py` + demo-scenario fixture
 
-### M2 · Agent speaks (target 05:00)
+### M2 · Agent speaks (target 05:30)
 - [ ] M2.1 Agent page + `/agent-page/ws`; a test phrase is audible in the call
 - [ ] M2.2 ElevenLabs TTS + `POST /tts` + cached "One sec…"
 - [ ] M2.3 Name trigger "Crew" → LLM (brief + docs in prompt) → voice; measure latency
@@ -32,7 +33,7 @@ Cut rules: escalation not end-to-end by 06:30 → drop M5. After 08:30 → bug f
 - [ ] M3.1 `Notifier` interface + expert matching
 - [ ] M3.2 Slack adapter + `/webhooks/slack`
 - [ ] M3.3 Escalation loop end-to-end, 2-min timeout → action item
-- [ ] M3.4 Telegram adapter (P2, fallback)
+- [ ] M3.4 Telegram adapter (P2, fallback) — CUT unless M3.5 passes before 06:30
 - [ ] M3.5 First end-to-end demo run (~06:15)
 
 ### M4 · Memory and chat (target 07:30)
@@ -48,14 +49,18 @@ Cut rules: escalation not end-to-end by 06:30 → drop M5. After 08:30 → bug f
 - [ ] M6.1 `/app/ws` all events, tokens, CORS
 - [ ] M6.2 3 runs of the 90-s scenario on real Meet, latency measured, backup video by 09:30
 
-## Human tasks (Artem)
-- [ ] Recall.ai account + API key (eu-central-1)
-- [ ] Supabase project (EU) + enable `vector` → `DATABASE_URL`
-- [ ] Railway project (EU)
-- [ ] Slack app: scopes, events, install (30–45 min)
-- [ ] ElevenLabs voice id
-- [ ] ngrok for local webhooks
-- [ ] SPEC "Do weryfikacji" items answered (researcher)
+## Research
+- [x] R1 SPEC "Do weryfikacji" blocking M1–M3 → `docs/decisions.md` (Recall output_media+recording_config, meeting chat endpoint, bot status events; Slack url_verification + signature)
+
+## Human tasks (Artem, in parallel — we build on respx mocks, ask only for live checks)
+- [ ] Supabase project (EU) + enable `vector` → `DATABASE_URL` (Session pooler, 5432)
+- [ ] Railway project (EU), auto-deploy from main, root `backend/` → domain = `PUBLIC_BASE_URL`
+- [ ] Recall.ai API key (eu-central-1)
+- [ ] Slack app (SPEC "Konfiguracja Slack app"); Request URL after M3.2 is deployed
+- [ ] ElevenLabs voice id + OpenAI key
+- Live checks pending: —
 
 ## Log (newest on top)
+- 03:01 · R1 · Recall/Slack open items → decisions #13–20; UNCONFIRMED: send_chat_message body, Slack bot_id · R1 commit
+- 03:00 · kickoff · re-baseline M0 03:45/M1 04:30/M2 05:30/M3 06:30 · researcher + M0.1 started
 - 02:30 · setup · orchestrator, developer, STATUS.md created
