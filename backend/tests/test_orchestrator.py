@@ -26,6 +26,7 @@ def env(monkeypatch):
     get_settings.cache_clear()
     llm._client = None
     orchestrator._busy.clear()
+    orchestrator._armed.clear()
     yield
     get_settings.cache_clear()
     llm._client = None
@@ -409,4 +410,62 @@ async def test_ask_keeps_guards_without_wake_word(world):
     orchestrator._busy.add(MID)
     world["mode"] = "delegate"
     assert await orchestrator.ask(MID, utt("x"), "x") is False
+    assert world["said"] == []
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    t = [1000.0]
+    monkeypatch.setattr(orchestrator, "_now", lambda: t[0])
+    return t
+
+
+@respx.mock
+async def test_armed_alias_then_question_within_window(world, clock, caplog):
+    route = respx.post(OPENAI_URL).mock(return_value=completion())
+    with caplog.at_level(logging.INFO, logger="app.orchestrator"):
+        await orchestrator.handle(MID, utt("Okay Atlas."))
+        assert route.call_count == 0
+        assert "armed m_01 Misha" in caplog.text
+        clock[0] += 5.0
+        await orchestrator.handle(MID, utt("what did Artem finish this week?"))
+    assert "armed → question in m_01: 'what did Artem finish this week?'" in caplog.text
+    assert world["said"] == ["Artem finished the Slack escalation flow."]
+    user = json.loads(route.calls.last.request.content)["messages"][1]["content"]
+    assert user.endswith("Misha asks you: what did Artem finish this week?")
+    assert orchestrator._armed == {}  # disarmed after use
+    await orchestrator.handle(MID, utt("and what about next week?"))
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_armed_expires_after_window(world, clock):
+    route = respx.post(OPENAI_URL).mock(return_value=completion())
+    await orchestrator.handle(MID, utt("Hey Atlas"))
+    clock[0] += orchestrator.ARMED_S + 0.1
+    await orchestrator.handle(MID, utt("what did Artem finish this week?"))
+    assert route.call_count == 0
+    assert world["said"] == []
+    assert orchestrator._armed == {}
+
+
+@respx.mock
+async def test_armed_ignores_other_speaker_and_stays_armed(world, clock):
+    route = respx.post(OPENAI_URL).mock(return_value=completion())
+    await orchestrator.handle(MID, utt("Atlas.", speaker="Misha"))
+    clock[0] += 1.0
+    await orchestrator.handle(MID, utt("what did Artem finish this week?", speaker="Dima"))
+    assert route.call_count == 0
+    assert (MID, "Misha") in orchestrator._armed
+    clock[0] += 1.0
+    await orchestrator.handle(MID, utt("um", speaker="Misha"))  # too short: stays armed
+    assert (MID, "Misha") in orchestrator._armed
+    await orchestrator.handle(MID, utt("what did Artem finish?", speaker="Misha"))
+    assert route.call_count == 1
+
+
+async def test_armed_question_keeps_guards(world, clock):
+    world["mode"] = "notetaker"
+    await orchestrator.handle(MID, utt("Okay Atlas."))
+    await orchestrator.handle(MID, utt("what did Artem finish?"))
     assert world["said"] == []

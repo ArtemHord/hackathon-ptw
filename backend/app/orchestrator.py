@@ -32,6 +32,15 @@ MIN_QUESTION_WORDS = 2
 _ALIAS_EXTRA = {"atlas": ("atlass", "atlis")}
 _SEGMENT_START_ALIAS = {"atlas": ("at last",)}  # too common mid-sentence: only as first words
 _WORD = re.compile(r"[a-z0-9]+(?:'[a-z]+)?", re.IGNORECASE)
+_SHORT = "question shorter than"
+# "Armed" wake word (M6.6): "Okay Atlas." alone arms (meeting, speaker) for ARMED_S; that
+# speaker's next utterance with >= MIN_QUESTION_WORDS words is the question.
+ARMED_S = 6.0
+_armed: dict[tuple[str, str], float] = {}  # (meeting_id, speaker) -> monotonic deadline
+
+
+def _now() -> float:
+    return time.monotonic()
 
 
 def wake_aliases(name: str | None = None) -> tuple[str, ...]:
@@ -122,7 +131,7 @@ def match_trigger(text: str) -> tuple[str | None, str]:
             return None, f"wake word is word {before + 1}, after the first {WAKE_MAX_WORDS}"
     question = re.sub(r"^[\W_]+", "", text[m.end() :]).strip()
     if len(_WORD.findall(question)) < MIN_QUESTION_WORDS:
-        return None, f"question shorter than {MIN_QUESTION_WORDS} words: {question!r}"
+        return None, f"{_SHORT} {MIN_QUESTION_WORDS} words: {question!r}"
     return question, "trigger"
 
 
@@ -199,12 +208,39 @@ async def handle(meeting_id: str, utterance: dict[str, Any]) -> None:
     """Entry point from the transcript webhook task. Never raises."""
     text = str(utterance.get("text") or "")
     log.info("utterance %s %s: %s", meeting_id, utterance.get("speaker"), text[:80])
+    key = (meeting_id, str(utterance.get("speaker") or ""))
     question, reason = match_trigger(text)
-    if question is None:
-        log.info("no trigger in %s: %s", meeting_id, reason)
+    if question is None and reason.startswith(_SHORT):
+        _armed[key] = _now() + ARMED_S
+        log.info("armed %s %s for %.0fs: %s", meeting_id, key[1], ARMED_S, reason)
         return
-    log.info("trigger in %s: %r", meeting_id, question)
+    if question is None:
+        question = _armed_question(key, text)
+        if question is None:
+            log.info("no trigger in %s: %s", meeting_id, reason)
+            return
+        log.info("armed → question in %s: %r", meeting_id, question)
+    else:
+        _armed.pop(key, None)
+        log.info("trigger in %s: %r", meeting_id, question)
     await ask(meeting_id, utterance, question)
+
+
+def _armed_question(key: tuple[str, str], text: str) -> str | None:
+    """The whole utterance as the question if this speaker is armed and it has 2+ words.
+    Disarms on use or expiry; a too-short utterance keeps the window open."""
+    deadline = _armed.get(key)
+    if deadline is None:
+        return None
+    if _now() > deadline:
+        _armed.pop(key, None)
+        log.info("armed expired %s %s", *key)
+        return None
+    question = re.sub(r"^[\W_]+", "", text).strip()
+    if len(_WORD.findall(question)) < MIN_QUESTION_WORDS:
+        return None
+    _armed.pop(key, None)
+    return question
 
 
 async def ask(meeting_id: str, utterance: dict[str, Any], question: str) -> bool:

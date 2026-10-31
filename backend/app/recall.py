@@ -18,6 +18,11 @@ TIMEOUT = httpx.Timeout(20.0)
 class RecallError(Exception):
     """Recall answered with an error or could not be reached."""
 
+    def __init__(self, message: str, status: int | None = None, body: str = ""):
+        super().__init__(message)
+        self.status = status
+        self.body = body
+
 
 def _base() -> str:
     return get_settings().RECALL_BASE_URL.rstrip("/")
@@ -37,8 +42,27 @@ def _signed_url(path: str, meeting_id: str) -> str:
     return f"{s.PUBLIC_BASE_URL.rstrip('/')}{path}?{query}"
 
 
-def build_bot_body(meeting_url: str, meeting_id: str) -> dict[str, Any]:
+def _transcript_provider(provider: str) -> dict[str, Any]:
+    """`recording_config.transcript.provider`. deepgram: nova-3 + keyterm boost for the wake word
+    (docs.recall.ai/reference/bot_create, deepgram_streaming; keyterm is nova-3 only)."""
+    if provider == "deepgram":
+        return {
+            "deepgram_streaming": {
+                "model": "nova-3",
+                "language": "en",
+                "keyterm": get_settings().transcript_keyterms,
+                # Deepgram default 10 ms splits "Okay Atlas," from the question
+                "endpointing": 300,
+            }
+        }
+    return {"recallai_streaming": {"mode": "prioritize_low_latency", "language_code": "en"}}
+
+
+def build_bot_body(
+    meeting_url: str, meeting_id: str, provider: str | None = None
+) -> dict[str, Any]:
     """Create Bot body: voice page (output_media) + low-latency realtime transcript in one call."""
+    provider = provider or get_settings().TRANSCRIPT_PROVIDER
     return {
         "meeting_url": meeting_url,
         "bot_name": BOT_NAME,
@@ -54,14 +78,7 @@ def build_bot_body(meeting_url: str, meeting_id: str) -> dict[str, Any]:
             "microsoft_teams": "web_4_core",
         },
         "recording_config": {
-            "transcript": {
-                "provider": {
-                    "recallai_streaming": {
-                        "mode": "prioritize_low_latency",
-                        "language_code": "en",
-                    }
-                }
-            },
+            "transcript": {"provider": _transcript_provider(provider)},
             "realtime_endpoints": [
                 {
                     "type": "webhook",
@@ -81,13 +98,24 @@ async def _post(path: str, json: dict[str, Any] | None = None) -> httpx.Response
     except httpx.HTTPError as e:
         raise RecallError(f"Recall request failed: {e.__class__.__name__}") from e
     if r.status_code >= 400:
-        raise RecallError(f"Recall {path} -> {r.status_code}: {r.text[:300]}")
+        raise RecallError(
+            f"Recall {path} -> {r.status_code}: {r.text[:300]}", r.status_code, r.text[:1000]
+        )
     return r
 
 
 async def create_bot(meeting_url: str, meeting_id: str) -> dict[str, Any]:
-    """POST /api/v1/bot/ and return Recall's bot object (has `id`)."""
-    r = await _post("/api/v1/bot/", build_bot_body(meeting_url, meeting_id))
+    """POST /api/v1/bot/ and return Recall's bot object (has `id`).
+    Deepgram rejected with 400 (e.g. no credentials in the dashboard) -> retry once with
+    recallai_streaming so the bot always joins."""
+    provider = get_settings().TRANSCRIPT_PROVIDER
+    try:
+        r = await _post("/api/v1/bot/", build_bot_body(meeting_url, meeting_id, provider))
+    except RecallError as e:
+        if provider != "deepgram" or e.status != 400:
+            raise
+        log.warning("recall rejected deepgram config, retrying with recallai: %s", e.body)
+        r = await _post("/api/v1/bot/", build_bot_body(meeting_url, meeting_id, "recallai"))
     data = r.json()
     if not data.get("id"):
         raise RecallError("Recall create bot response has no id")

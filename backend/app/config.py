@@ -23,6 +23,16 @@ class Settings(BaseSettings):
     DEMO_TOKEN: str = ""
     WEBHOOK_TOKEN: str = ""
     AGENT_NAME: str = "Atlas"  # wake word + bot display name (M6.3)
+    TRANSCRIPT_PROVIDER: str = "recallai"  # recallai | deepgram (M6.6, decision 28)
+    TRANSCRIPT_EXTRA_KEYTERMS: str = ""  # comma-separated aliases appended to the keyterms
+
+    @property
+    def transcript_keyterms(self) -> list[str]:
+        """Deepgram nova-3 keyterm boost: the wake word, its common openers, then extras."""
+        n = self.AGENT_NAME
+        extra = [t.strip() for t in self.TRANSCRIPT_EXTRA_KEYTERMS.split(",") if t.strip()]
+        return [n, f"Hey {n}", f"Okay {n}", *extra]
+
     CORS_ORIGINS: str = "*"  # comma-separated origins for the app / web client
 
 
