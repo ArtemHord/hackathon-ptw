@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M5.2 KB update proposals + approve/reject (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: M6.1 /app/ws completeness, tokens, CORS (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: Railway 502 (target port / root dir — Artem) · M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -48,9 +48,9 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M4.3a `GET /meetings`, `GET /meetings/{id}?since=` (contract key sets asserted)
 - [x] M4.3b `POST /chat` with citations (after M4.1)
 
-### M5 · Fact-check (target 08:00, cut first)
+### M5 · Fact-check (target 08:00, cut first) — DONE 04:22 (live Recall chat body unconfirmed)
 - [x] M5.1 Live fact-check + message in the meeting chat
-- [ ] M5.2 KB update proposals + approve / reject
+- [x] M5.2 KB update proposals + approve / reject
 
 ### M6 · Stabilize + demo (target 08:30)
 - [ ] M6.1 `/app/ws` all events, tokens, CORS
@@ -76,6 +76,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 04:22 · M5.2 · proposals + approve/reject (transactional, 409 stale), + my guard old_text ≥ 10 chars; 177 tests · f57aab6
 - 04:19 · M5.1 · fact-check; review BLOCKER (source null in app) → kb_chunk_for_title, verified on real pg; 170 tests · a688278
 - 04:17 · M4 verify · PASS: list/detail keys = mocks, ?since filters, /chat fallback, /kb/docs, 401s · item keys of empty arrays covered by M4.3a real-DB tests
 - 04:16 · M4.3b · /chat RAG + citations; review demo nits fixed (Dima cited at answered_ts=380 verified on real pg, fact embedded on reply); 163 tests · d8000be
