@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M2.5c committed locally, push held until Artem confirms no live bot · Artem: Deepgram key → Recall dashboard + Railway TRANSCRIPT_PROVIDER=deepgram → LIVE TEST 3 → M3.5 · Artem: Slack setup — M3.5 blocked on HUMAN (keys, Slack, live test)
+- In progress: M3.5 Slack E2E next · Artem: Deepgram key → Recall dashboard + Railway TRANSCRIPT_PROVIDER=deepgram → LIVE TEST 3 → M3.5 · Artem: Slack setup — M3.5 blocked on HUMAN (keys, Slack, live test)
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -88,6 +88,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 06:06 · LIVE TEST 3 PASS · Deepgram nova-3 keyterm accepted (201, no fallback); "Okay Atlas, what did Artem finish" → voice answer; latency total 2.7–3.2 s (LLM 2.4–3.0 s, TTS+push ~230 ms), conf 0.98, filler played; orb sharp pushed (b4c49aa)
 - 05:46 · M2.5c · orb sharp (full-res edges, 640x360 glow), 30 fps @4x throttle; review clean · b4c49aa (local, push held)
 - 05:42 · M6.6 · Deepgram nova-3 keyterm + endpointing 300 behind TRANSCRIPT_PROVIDER, 400→recallai fallback, armed wake word (6 s); 212 tests · 891e7b6 · pushed
 - 05:37 · LIVE TEST 2 · bot "Atlas (AI)" joined, utterances logged; "Okay Atlas, what did Artem finish" → ASR "oh okay what did i finish this week" (name dropped) → Artem chose Deepgram nova-3 + keyterm (M6.6); orb looks ~240p in Meet (M2.5c)
