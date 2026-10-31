@@ -90,7 +90,7 @@ Karta eskalacji: `escalation_created` dodaje kartę o `id` (waiting), `escalatio
 
 Addytywne, poza ekranami mobilnymi. Auth jak wyżej (Bearer `DEMO_TOKEN`). Wartości z bazy (`app_settings`) mają pierwszeństwo przed env.
 
-- `GET /settings` → `{values: {<KEY>: {secret, value, set, hint, source}}, public_base_url}`; klucze: `AGENT_NAME, OWNER_NAME, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_AUTO_CREATE`. Sekrety nigdy nie wracają (`value: null`, `hint: "…ab12"`); `source`: `db | env | unset`.
+- `GET /settings` → `{values: {<KEY>: {secret, value, set, hint, source}}, public_base_url}`; klucze: `AGENT_NAME, OWNER_NAME, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_AUTO_CREATE, AGENT_TOOLS` (`AGENT_TOOLS`: `"false"` wyłącza narzędzia agenta w rozmowie — web search, KB, create doc). Sekrety nigdy nie wracają (`value: null`, `hint: "…ab12"`); `source`: `db | env | unset`.
 - `PUT /settings` — częściowy `{<KEY>: "value"}`; `""` usuwa nadpisanie (powrót do env); nieznany klucz → `422`. Odpowiedź jak `GET`.
 - `GET /integrations` → `{slack: {configured, webhook_url}, telegram: {configured, webhook_url, bot_username}, jira: {configured, base_url, project_key}}`.
 - `POST /integrations/{slack|telegram|jira}/test` → `{ok, detail}` (+ `bot_username` dla telegram; test Telegrama rejestruje też webhook, gdy ustawione `PUBLIC_BASE_URL` i sekret).
