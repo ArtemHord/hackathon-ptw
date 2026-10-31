@@ -11,7 +11,7 @@ Everything the agent says or writes in a call is in English (demo language).
 - Install: `cd backend && uv sync`
 - Run dev: `cd backend && uv run uvicorn app.main:app --reload --port 8000`
 - Public URL for Recall/Slack webhooks: `ngrok http 8000` → set `PUBLIC_BASE_URL`
-- Web app (React + Vite + shadcn, `backend/web/`): `cd backend/web && npm i && npm run dev` → http://localhost:5173/ui/ (proxies API + WS to :8000) · `npm run build` → FastAPI serves it at `/ui` (`/` redirects there). Login = `DEMO_TOKEN`. The Docker image builds it in a node stage.
+- Web app (React + Vite + shadcn, `backend/web/`): `cd backend/web && npm i && npm run dev` → http://localhost:5173/ui/ (proxies API + WS to :8000; `BACKEND_URL=http://127.0.0.1:8001 npm run dev` for another backend) · `npm run build` → FastAPI serves it at `/ui` (`/` redirects there). Two versions, one login (`DEMO_TOKEN`): `/ui/` = client-facing app (the iOS app's features and style), `/ui/test/` = testing tools (simulate, call debug, agent, experts, integrations). The Docker image builds it in a node stage.
 - Local DB: `docker run -d --name callcrew-pg -p 55449:5432 -e POSTGRES_PASSWORD=pw pgvector/pgvector:pg16`, `docker exec callcrew-pg psql -U postgres -c "create database callcrew"`, then `DATABASE_URL=postgresql://postgres:pw@localhost:55449/callcrew` for migrate + uvicorn. Tests use the `postgres` DB on the same container (`TEST_DATABASE_URL` / `E2E_DATABASE_URL`) and wipe it.
 - Test: `cd backend && uv run pytest -q` (no real network: mock every external HTTP call with respx)
 - Smoke: `curl -s localhost:8000/health`
@@ -27,7 +27,7 @@ Everything the agent says or writes in a call is in English (demo language).
 ## Repo map
 - `backend/app/` — one module per concern: `main.py`, `config.py`, `db.py`, `recall.py`, `orchestrator.py`, `escalation.py`, `notifier/` (base, slack, telegram, fake), `runtime.py`, `jira.py`, `telegram_api.py`, `tts.py`, `rag.py`, `factcheck.py`, `postcall.py`
 - `backend/migrations/`, `backend/seed/`, `backend/tests/`
-- `backend/web/` — setup + test web app (React, shadcn/ui), served at `/ui` by `app/web_ui.py`; routers for it: `settings_api.py` (settings, integrations, experts), `debug.py` (simulate)
+- `backend/web/` — web app (React, shadcn/ui), served at `/ui` by `app/web_ui.py`: `src/client/` = client app at `/ui/`, `src/test/` = testing tools at `/ui/test/`; routers for it: `settings_api.py` (settings, integrations, experts), `debug.py` (simulate)
 - `backend/agent_page/index.html` — the bot's "camera" page (vanilla JS, no build), served by FastAPI at `/agent` (inside backend/ so the Railway image contains it)
 - `scripts/` — migrate, seed_kb, simulate_meeting
 - **API contract = `docs/API.pl.md` + `mocks/*.json`**. The iOS app is built against it. Frozen after M0: change only via an issue labeled `contract`, and update the mocks in the same PR.

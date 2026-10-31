@@ -12,6 +12,7 @@ import {
   api, fmtTs, wsUrl,
   type ActionItem, type AgentSaid, type Escalation, type FactCheck, type MeetingDetail, type Utterance,
 } from "@/lib/api"
+import { Markdown } from "@/lib/markdown"
 import { cn } from "@/lib/utils"
 
 type Feed = Pick<MeetingDetail, "utterances" | "agent_said" | "fact_checks" | "escalations">
@@ -77,7 +78,7 @@ function FactCheckCard({ f }: { f: FactCheck }) {
         {f.correction && <div>Correction: {f.correction}</div>}
         {f.source && <div className="text-xs text-muted-foreground">Source: {f.source}</div>}
         {f.proposal_id && (
-          <Link to="/kb" className="text-xs underline">KB proposal {f.proposal_id}</Link>
+          <Link to="/test/kb" className="text-xs underline">KB proposal {f.proposal_id}</Link>
         )}
       </CardContent>
     </Card>
@@ -250,6 +251,7 @@ export default function Meeting() {
         <Badge variant="secondary">{status}</Badge>
         {live && <span className="text-xs text-muted-foreground">{wsOk ? "websocket" : "polling"}</span>}
         <div className="ml-auto flex gap-2">
+          <Link to={`/calls/${id}`} className="inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted">Open in the app</Link>
           {live && <Button variant="destructive" disabled={leave.isPending} onClick={() => leave.mutate()}>Leave</Button>}
         </div>
       </div>
@@ -266,7 +268,7 @@ export default function Meeting() {
         <Card>
           <CardHeader><CardTitle>Summary</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-4 text-sm">
-            {meeting.summary ? <p>{meeting.summary}</p> : <p className="text-muted-foreground">Summary is being generated...</p>}
+            {meeting.summary ? <Markdown text={meeting.summary} className="text-sm" /> : <p className="text-muted-foreground">Summary is being generated...</p>}
             <div>
               <h3 className="mb-1 font-medium">Decisions</h3>
               {meeting.decisions.length ? <ul className="list-disc pl-5">{meeting.decisions.map((d, i) => <li key={i}>{d}</li>)}</ul>

@@ -41,7 +41,7 @@ export default function Chat() {
                 {t.citations.map((c, j) => (
                   <li key={j}>
                     {c.type === "meeting" ? (
-                      <Link className="underline" to={`/meetings/${c.meeting_id}`}>
+                      <Link className="underline" to={`/test/calls/${c.meeting_id}`}>
                         {c.meeting_id} @ {fmtTs(c.ts)} - {c.speaker}: {c.text}
                       </Link>
                     ) : (
