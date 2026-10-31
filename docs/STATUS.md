@@ -4,8 +4,8 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M4.3b POST /chat with citations (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
-- Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
+- In progress: M4 verifier ‖ M5.1 fact-check next — M3.5 blocked on HUMAN (keys, Slack, live test)
+- Blocked: Railway 502 (target port / root dir — Artem) · M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
 Cut rules: escalation not end-to-end by 06:30 → drop M5. After 08:30 → bug fixes only. 11:00 → freeze. If M2 not done by 05:30 → start M3 anyway.
@@ -42,11 +42,11 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [ ] M3.4 Telegram adapter (P2, fallback) — CUT unless M3.5 passes before 06:30
 - [ ] M3.5 First end-to-end demo run (~06:15)
 
-### M4 · Memory and chat (target 07:30)
+### M4 · Memory and chat (target 07:30) — DONE 04:16 (real-key run pending)
 - [x] M4.1a KB RAG on pgvector: `GET/POST /kb/docs`, `rag.search`, `scripts/seed_kb.py`, backfill (orchestrator keeps full docs, decision 25)
 - [x] M4.2 Post-call pipeline (summary, decisions, action items, facts)
 - [x] M4.3a `GET /meetings`, `GET /meetings/{id}?since=` (contract key sets asserted)
-- [ ] M4.3b `POST /chat` with citations (after M4.1)
+- [x] M4.3b `POST /chat` with citations (after M4.1)
 
 ### M5 · Fact-check (target 08:00, cut first)
 - [ ] M5.1 Live fact-check + message in the meeting chat
@@ -76,6 +76,8 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 04:16 · M4.3b · /chat RAG + citations; review demo nits fixed (Dima cited at answered_ts=380 verified on real pg, fact embedded on reply); 163 tests · d8000be
+- 04:16 · HUMAN · Railway domain https://hackathon-ptw-production.up.railway.app → 502; local image OK with PORT → Railway config (target port/root dir)
 - 04:13 · M4.1a · KB API + RAG + seed; DB tests re-run by me on real pg (5/5); 159 tests · 304865e
 - 04:10 · M2.5b · orb signals wired (thinking/idle/ask/ask_done), ask layout persists while speaking (screenshot ok); cap lowered to 0.3 s after review; 154 tests · 9f8e73e
 - 04:09 · HUMAN · Supabase migrated (001 applied) after password reset (special chars broke DSN)
