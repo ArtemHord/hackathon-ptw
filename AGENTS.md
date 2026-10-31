@@ -15,7 +15,8 @@ Everything the agent says or writes in a call is in English (demo language).
 - Smoke: `curl -s localhost:8000/health`
 - Lint/format: `cd backend && uv run ruff check --fix . && uv run ruff format .`
 - Migrate / seed: `cd backend && uv run python ../scripts/migrate.py` · `cd backend && uv run python ../scripts/seed_kb.py`
-- Simulate a call without Recall: `cd backend && uv run python ../scripts/simulate_meeting.py`
+- Simulate a call without Recall: `cd backend && uv run python ../scripts/simulate_meeting.py [--speed 20] [--expert-reply Thursday|--no-reply] [--meeting-id ID]` (needs a running backend + DB)
+- Demo run sheet: `docs/DEMO.md`; agent page debug: `/agent?demo=1` or `?state=idle|listening|thinking|speaking|ask`
 - Deploy: Railway (EU) from `backend/Dockerfile`, health check `/health`.
 - Env: copy `.env.example` → `.env`; variable names are in SPEC.md ("Zmienne środowiskowe"). Never read, print or commit `.env`.
 - If you change how the project is installed, run or tested, update this section in the same PR.
