@@ -174,3 +174,17 @@ def test_leave_schedules_run(monkeypatch):
         while not calls and time.monotonic() < end:
             time.sleep(0.01)
     assert calls == ["m_01"]
+
+
+def test_prompt_includes_agent_lines_in_order(monkeypatch):
+    """The summary sees what the agent said (e.g. the INC-011 finding), not only humans."""
+    monkeypatch.setenv("AGENT_NAME", "Atlas")
+    get_settings.cache_clear()
+    prompt = postcall.build_prompt(
+        "brief",
+        [{"speaker": "Marek", "text": "Atlas, similar outage before?", "ts_start": 18}],
+        [],
+        [{"text": "Yes. INC-011 matched both symptoms.", "ts": 23}],
+    )
+    assert prompt.index("Marek: Atlas, similar") < prompt.index("Atlas (AI): Yes. INC-011")
+    get_settings.cache_clear()

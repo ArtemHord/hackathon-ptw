@@ -73,9 +73,16 @@ def _fmt_ts(sec: Any) -> str:
 
 
 def build_prompt(
-    brief: str, utterances: list[dict[str, Any]], escalations: list[dict[str, Any]]
+    brief: str,
+    utterances: list[dict[str, Any]],
+    escalations: list[dict[str, Any]],
+    agent_lines: list[dict[str, Any]] | None = None,
 ) -> str:
-    lines = [f"[{_fmt_ts(u.get('ts_start'))}] {u['speaker']}: {u['text']}" for u in utterances]
+    rows = [(u.get("ts_start"), u["speaker"], u["text"]) for u in utterances]
+    agent = runtime.get("AGENT_NAME")  # what the agent said is part of the call (e.g. INC-011)
+    rows += [(a.get("ts"), f"{agent} (AI)", a["text"]) for a in agent_lines or []]
+    rows.sort(key=lambda r: r[0] if r[0] is not None else 0)
+    lines = [f"[{_fmt_ts(ts)}] {who}: {text}" for ts, who, text in rows]
     esc = []
     for e in escalations:
         who = e.get("expert") or "expert"
@@ -151,11 +158,19 @@ async def _run(meeting_id: str) -> None:
     utterances = await db.get_all_utterances(meeting_id)
     brief = await db.get_brief(meeting_id)
     escalations = await db.list_escalations(meeting_id)
+    try:  # optional context; the summary must not fail because of it
+        agent_lines = await db.list_agent_said(meeting_id)
+    except Exception as e:
+        log.info("postcall: no agent lines for %s: %r", meeting_id, e)
+        agent_lines = []
     try:
         out = await llm.chat_json(
             [
                 {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": build_prompt(brief, utterances, escalations)},
+                {
+                    "role": "user",
+                    "content": build_prompt(brief, utterances, escalations, agent_lines),
+                },
             ],
             "postcall",
             SCHEMA,

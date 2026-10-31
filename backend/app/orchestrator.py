@@ -179,6 +179,9 @@ compare it with the past incident that matches ALL reported symptoms and name bo
 <its cause>." Never compare only with the current incident.
 - When someone asks you to ask or contact a named person, set needs_expert=true and topic \
 to that person's name.
+- When asked to summarize the call, the incident or the follow-ups, answer from the recent \
+transcript only (what people in this call said and confirmed), in at most 2 sentences, \
+needs_expert=false. Never escalate a summary request and never add unobserved facts.
 - "There is no data on that", "that is not confirmed yet" or "no, I can't do that" are \
 complete answers: needs_expert=false with high confidence. This overrides the rule to set \
 needs_expert when the context lacks the answer.
@@ -703,11 +706,15 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
             escalation_id = hooked.get("escalation_id") or None
         elif isinstance(hooked, str) and hooked.strip():
             expert = hooked.strip()
-        text = (
-            f"I don't know, asking {expert} now."
-            if expert
-            else ("I don't know yet, I'll ask the team.")
+        asked_for = expert and re.search(
+            rf"\b(ask|contact|ping|message|check with)\s+{re.escape(expert)}\b", question, re.I
         )
+        if asked_for:  # "ask Ola how to verify it" is a request, not a knowledge gap
+            text = f"Sure, asking {expert} on Slack now."
+        elif expert:
+            text = f"I don't know, asking {expert} now."
+        else:
+            text = "I don't know yet, I'll ask the team."
     else:
         text = result["answer"]
 

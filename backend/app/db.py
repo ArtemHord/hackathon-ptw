@@ -244,6 +244,15 @@ async def get_all_utterances(meeting_id: str) -> list[dict[str, Any]]:
 # --- agent_said --------------------------------------------------------------
 
 
+async def list_agent_said(meeting_id: str) -> list[dict[str, Any]]:
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "select text, ts from agent_said where meeting_id = $1 order by ts, created_at",
+        meeting_id,
+    )
+    return [dict(r) for r in rows]
+
+
 async def insert_agent_said(
     meeting_id: str, text: str, ts: float | None, in_reply_to: str | None = None
 ) -> dict[str, Any]:

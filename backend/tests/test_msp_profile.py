@@ -458,7 +458,7 @@ async def test_msp_no_citations_when_escalated(world):
     assert await orchestrator.ask(MID, _utt(f"Atlas, {q}"), q)
     await _drain()
     assert world["hook"] == ["Ola"] and world["chat"] == []
-    assert world["said"] == ["I don't know, asking Ola now."]
+    assert world["said"] == ["Sure, asking Ola on Slack now."]
 
 
 def test_sources_text_cap_and_acme_format():
