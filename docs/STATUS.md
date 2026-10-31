@@ -81,7 +81,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [ ] (Artem decides) spoken fact-check interjection behind a flag
 
 ### M10 · Atlas quality (Artem 09:20; override of SPEC "bug fixes only after 08:30")
-- [ ] M10.1 Prompt: Jarvis persona, general knowledge allowed, time-sensitive public facts → web_search, internal → expert; own answers (agent_said, last 2 min, ≤5) in context (senior-developer)
+- [x] M10.1 Prompt: Jarvis persona, general knowledge allowed, time-sensitive public facts → web_search, internal → expert; own answers (agent_said, last 2 min, ≤5) in context (senior-developer)
 - CUT: follow-up window (conflicts with fact-check line, decision #10), queue, fillers, env/model knobs, live view polish, PR #3 merge before freeze
 
 ## Research
@@ -110,6 +110,8 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 10:16 · M10.1 · review: no blockers (333 tests, ruff) · local commit; push waits for Julian "no bot in call" (deadline 10:25)
+- 10:09 · M10.1 · built: Postgres 17 escalates 5/5 (tools) + 5/5 (no tools); "Friday" → owner; rate limit 50 rps no web; Python → web_search 3.6 s; Canberra 1.7 s; follow-up "and why" ok; non-escalation 1.7–4.0 s; 333 tests · in review (before 10:15 checkpoint) · —
 - 10:00 · step 0 · main checkout was on branch IOS since 09:37 → back to main; local smoke DB callcrew on 55449 created; M10.1 → senior-developer · —
 - 09:01 · status check · prod healthy after 9c459f5 deploy; integrations all unconfigured; 0 hist meetings on prod; live bot in meeting "dev" · —
 - 08:57 · push · M8.1b + M9.1 + SCENARIOS.md on main (9c459f5), Artem OK · Railway deploying; next: Artem seeds Supabase (seed_kb + seed_history)
