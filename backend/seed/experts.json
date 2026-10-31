@@ -1,0 +1,48 @@
+{
+  "_note": "HACK: placeholder emails",
+  "experts": [
+    {
+      "name": "Dima",
+      "role": "Backend & infra",
+      "topics": [
+        "database",
+        "postgres",
+        "infra",
+        "deploy",
+        "auth"
+      ],
+      "channel": "slack",
+      "email": "dima@example.com",
+      "slack_user_id": null,
+      "telegram_chat_id": null
+    },
+    {
+      "name": "Julian",
+      "role": "API",
+      "topics": [
+        "api",
+        "endpoints",
+        "webhooks",
+        "rate limit"
+      ],
+      "channel": "slack",
+      "email": "julian@example.com",
+      "slack_user_id": null,
+      "telegram_chat_id": null
+    },
+    {
+      "name": "Misha",
+      "role": "Mobile / design",
+      "topics": [
+        "mobile",
+        "design",
+        "ios",
+        "billing page"
+      ],
+      "channel": "slack",
+      "email": "misha@example.com",
+      "slack_user_id": null,
+      "telegram_chat_id": null
+    }
+  ]
+}
