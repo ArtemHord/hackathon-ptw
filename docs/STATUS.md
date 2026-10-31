@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress (09:01): prod has NO Slack/Jira/Telegram config, experts = example.com, history seed not on prod → Artem: Slack setup + seed_kb/seed_history on Supabase → M3.5 live; then 3 demo runs + backup video; freeze 11:00
+- In progress (10:00): M10.1 Atlas prompt + own answers (senior-developer) · checkpoint 10:15 (not in review → abort) · LAST PUSH 10:25 (Julian confirms no bot in call) · no Railway var changes after 10:25 · then demo runs + backup video only
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -80,6 +80,10 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [ ] M9.2 Second dev: run SCENARIOS.md §1 setup + §5 tests, fill §6 results
 - [ ] (Artem decides) spoken fact-check interjection behind a flag
 
+### M10 · Atlas quality (Artem 09:20; override of SPEC "bug fixes only after 08:30")
+- [ ] M10.1 Prompt: Jarvis persona, general knowledge allowed, time-sensitive public facts → web_search, internal → expert; own answers (agent_said, last 2 min, ≤5) in context (senior-developer)
+- CUT: follow-up window (conflicts with fact-check line, decision #10), queue, fillers, env/model knobs, live view polish, PR #3 merge before freeze
+
 ## Research
 - [x] R1 SPEC "Do weryfikacji" blocking M1–M3 → `docs/decisions.md` (Recall output_media+recording_config, meeting chat endpoint, bot status events; Slack url_verification + signature)
 
@@ -106,6 +110,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 10:00 · step 0 · main checkout was on branch IOS since 09:37 → back to main; local smoke DB callcrew on 55449 created; M10.1 → senior-developer · —
 - 09:01 · status check · prod healthy after 9c459f5 deploy; integrations all unconfigured; 0 hist meetings on prod; live bot in meeting "dev" · —
 - 08:57 · push · M8.1b + M9.1 + SCENARIOS.md on main (9c459f5), Artem OK · Railway deploying; next: Artem seeds Supabase (seed_kb + seed_history)
 - 08:50 · M9.1 · local: S3 "10 % off December" 4.5 s via search_knowledge; S4 three keys 3.1 s; Postgres 17 still escalates; sim RESULT OK; 329 tests · local commit; Artem: push + seed_kb.py + seed_history.py on Supabase
