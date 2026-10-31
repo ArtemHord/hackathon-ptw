@@ -86,6 +86,17 @@ Jeden WS na ekran Live. Każda wiadomość to envelope:
 
 Karta eskalacji: `escalation_created` dodaje kartę o `id` (waiting), `escalation_answered` z tym samym `id` aktualizuje ją (answered, albo timeout z `answer: null`).  Zmiany statusu rozmowy przychodzą zdarzeniem `meeting_status` (i polem `status` w `GET /meetings/{id}`).
 
+## Konfiguracja agenta i narzędzia testowe (dodane M7, web app `/ui`)
+
+Addytywne, poza ekranami mobilnymi. Auth jak wyżej (Bearer `DEMO_TOKEN`). Wartości z bazy (`app_settings`) mają pierwszeństwo przed env.
+
+- `GET /settings` → `{values: {<KEY>: {secret, value, set, hint, source}}, public_base_url}`; klucze: `AGENT_NAME, OWNER_NAME, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_AUTO_CREATE`. Sekrety nigdy nie wracają (`value: null`, `hint: "…ab12"`); `source`: `db | env | unset`.
+- `PUT /settings` — częściowy `{<KEY>: "value"}`; `""` usuwa nadpisanie (powrót do env); nieznany klucz → `422`. Odpowiedź jak `GET`.
+- `GET /integrations` → `{slack: {configured, webhook_url}, telegram: {configured, webhook_url, bot_username}, jira: {configured, base_url, project_key}}`.
+- `POST /integrations/{slack|telegram|jira}/test` → `{ok, detail}` (+ `bot_username` dla telegram; test Telegrama rejestruje też webhook, gdy ustawione `PUBLIC_BASE_URL` i sekret).
+- `GET /experts` → `{items: [{id, name, role, topics, channel: "slack"|"telegram", email, slack_user_id, telegram_chat_id, is_owner}]}`; `POST /experts` → `201`; `PUT /experts/{id}` (częściowy); `DELETE /experts/{id}` → `{id, deleted: true}`; `POST /experts/{id}/test` → `{ok, detail}`. Bez bazy zapis → `409`.
+- `POST /debug/simulate` `{speed?: 20, expert_reply?: "Thursday" | null}` → `202 {meeting_id}`; odtwarza `seed/demo_transcript.json` jako webhooki Recall; bez bazy → `409`. `/debug/*` przyjmuje Bearer `DEMO_TOKEN` albo `?token=WEBHOOK_TOKEN`.
+
 ## Poza kontraktem aplikacji (webhooki i strona agenta)
 
 `POST /webhooks/recall/transcript`, `POST /webhooks/recall/status`, `POST /webhooks/slack`, `POST /webhooks/telegram`, `GET /agent`, `WS /agent-page/ws`, `GET /health`.
