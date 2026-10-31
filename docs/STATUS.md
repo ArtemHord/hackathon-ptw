@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M1
-- In progress: M1.4 simulate_meeting.py + demo fixture (developer)
+- In progress: M1 verifier run
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -21,7 +21,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M1.1 Recall client, `POST /meetings`, `POST /meetings/{id}/leave`; bot joins Google Meet
 - [x] M1.2 Transcript webhook → `utterances`, dedup, WS event
 - [x] M1.3 Bot status webhook
-- [ ] M1.4 `scripts/simulate_meeting.py` + demo-scenario fixture
+- [x] M1.4 `scripts/simulate_meeting.py` + demo-scenario fixture
 
 ### M2 · Agent speaks (target 05:30)
 - [ ] M2.1 Agent page + `/agent-page/ws`; a test phrase is audible in the call
@@ -56,7 +56,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Contract FROZEN after M0: `docs/API.pl.md` + `mocks/` (17). Changes = Artem gate. One escalation shape {id, expert, channel, question, asked_by, ts, status waiting|answered|timeout, answer, answered_ts}; timeout = `escalation_answered` with status timeout. WS envelope {type, meeting_id, ts ISO, data}; data.ts = seconds from call start. 7 WS events incl. `meeting_status`.
 - DB: `001_init.sql`, text ids (uuid), `utterances` dedup → `INSERT … ON CONFLICT (meeting_id, speaker, ts_start) DO NOTHING`; Slack reply lookup `escalations.external_msg_id`. `agent_said` table for poll mode.
 - Recall/Slack facts: `docs/decisions.md` #13–20 (one bot create with output_media + recording_config, `recallai_streaming` prioritize_low_latency; status via dashboard webhook, post-call on `bot.done`; Slack v0 HMAC, ignore bot_id/bot_message, dedupe event_id).
-- Run: `cd backend && uv run pytest -q`; Docker CMD uvicorn on `${PORT:-8000}`; agent-page/ outside build context → serve from backend/ (M2.1).
+- Run: `cd backend && uv run pytest -q`; simulate: `cd backend && DATABASE_URL=… WEBHOOK_TOKEN=… DEMO_TOKEN=… uv run python ../scripts/simulate_meeting.py --speed 20` (needs running backend + DB; exit 1 if utterance events != unique lines); Recall status dashboard URL `{PUBLIC_BASE_URL}/webhooks/recall/status?token={WEBHOOK_TOKEN}`; Docker CMD uvicorn on `${PORT:-8000}`; agent-page/ outside build context → serve from backend/ (M2.1).
 
 ## Human tasks (Artem, in parallel — we build on respx mocks, ask only for live checks)
 - [ ] Supabase project (EU) + enable `vector` → `DATABASE_URL` (Session pooler, 5432)
@@ -67,6 +67,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:20 · M1.4 · simulator replays demo (7 lines, dedup shown, status in_call/done); 31 tests · bb3b6ab
 - 03:18 · M1.3 · status webhook mapping + terminal-state guard, postcall_hook stub; 30 tests · 609ed4d
 - 03:16 · M1.2 · transcript webhook dedup + /app/ws (4401), orchestrator_hook stub for M2.3; 26 tests; Docker --no-access-log (token in query) · 2adf1ce
 - 03:13 · M1.1 · Recall create/leave, Bearer auth, lazy DB pool; 18 tests, db.py checked on real pg · c30cb1d
