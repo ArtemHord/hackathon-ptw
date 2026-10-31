@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress (10:16): M10.1 + PR #4 pushed (31ef6d5) · profile acme · now ONLY demo runs + backup video; no pushes, no Railway var changes; freeze 11:00
+- In progress (10:39): FINAL BUILD 3660077 Active (M10.3 + PR #5) · zero pushes until 11:00 · demo runs + backup video
 - Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -111,6 +111,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 10:39 · push · 3660077 (M10.3 + PR #5 demo-data merged, 375 tests) Active, /health ok · final build
 - 10:33 · M10.3 · PL question → PL answer; "last meeting" → 31 Oct 10:12; rate limit → answers but cites meetings, not api.md (stored "100 rps" demo utterances outrank the doc; pre-existing retrieval, not M10.3); 375 tests · local commit, push waits for Artem (3 runs + video, ≤10:50, no bot)
 - 10:30 · failed meetings 09:58/09:59/10:02 · Recall fatal meeting_requires_sign_in (Meet restricted to signed-in users), not code; use open-access meet.new · M10.3 /chat → developer · —
 - 10:16 · push · 31ef6d5 (M10.1 + PR #4) after Artem: no bot in call; demo profile = acme · Railway deploying
