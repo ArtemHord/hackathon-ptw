@@ -82,7 +82,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 
 ### M10 · Atlas quality (Artem 09:20; override of SPEC "bug fixes only after 08:30")
 - [x] M10.1 Prompt: Jarvis persona, general knowledge allowed, time-sensitive public facts → web_search, internal → expert; own answers (agent_said, last 2 min, ≤5) in context (senior-developer)
-- [ ] M10.3 /chat: reply in the question's language + "Recent calls" block (last 10 meetings, not citable) (developer) · push only after Artem: 3 runs + backup video done, hard stop 10:50
+- [x] M10.3 /chat: reply in the question's language + "Recent calls" block (last 10 meetings, not citable) (developer) · push only after Artem: 3 runs + backup video done, hard stop 10:50
 - CUT: follow-up window (conflicts with fact-check line, decision #10), queue, fillers, env/model knobs, live view polish, PR #3 merge before freeze
 
 ## Research
@@ -111,6 +111,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 10:33 · M10.3 · PL question → PL answer; "last meeting" → 31 Oct 10:12; rate limit → answers but cites meetings, not api.md (stored "100 rps" demo utterances outrank the doc; pre-existing retrieval, not M10.3); 375 tests · local commit, push waits for Artem (3 runs + video, ≤10:50, no bot)
 - 10:30 · failed meetings 09:58/09:59/10:02 · Recall fatal meeting_requires_sign_in (Meet restricted to signed-in users), not code; use open-access meet.new · M10.3 /chat → developer · —
 - 10:16 · push · 31ef6d5 (M10.1 + PR #4) after Artem: no bot in call; demo profile = acme · Railway deploying
 - 10:13 · merge · origin/main (Julian PR #4: profiles acme/msp, ask-by-name) + M10.1; orchestrator conflict resolved (both kept); 374 tests, ruff, mini smoke ok; review no blockers · local; push waits for "no bot in call" (≤10:25). DEMO.md: delete stored Postgres-17 answer facts before each run
