@@ -66,11 +66,41 @@ async def listen(ws_url: str, events: list[dict], ready: asyncio.Event) -> None:
             print(f"  <- ws {msg.get('type')}: {data[:140]}")
 
 
+async def check_escalation(http, base, s, meeting_id, events, args) -> None:
+    for _ in range(100):  # up to 10 s
+        if any(e.get("type") == "escalation_created" for e in events):
+            break
+        await asyncio.sleep(0.1)
+    else:
+        print("no escalation_created within 10 s (LLM did not ask an expert)")
+        return
+    if args.no_reply:
+        print("--no-reply: leaving the escalation to time out")
+        return
+    await asyncio.sleep(3)
+    q = f"token={quote(s.WEBHOOK_TOKEN)}"
+    r = await http.get(f"{base}/debug/escalations?meeting_id={quote(meeting_id)}&{q}")
+    r.raise_for_status()
+    waiting = [x for x in r.json() if x["status"] == "waiting"]
+    if not waiting:
+        print("no waiting escalation found")
+        return
+    print(f"-> expert reply: {args.expert_reply!r}")
+    r = await http.post(
+        f"{base}/debug/expert-reply?{q}",
+        json={"escalation_id": waiting[0]["id"], "text": args.expert_reply},
+    )
+    r.raise_for_status()
+    await asyncio.sleep(1.5)
+
+
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:8000")
     ap.add_argument("--speed", type=float, default=5.0)
     ap.add_argument("--meeting-id")
+    ap.add_argument("--expert-reply", default="Thursday", help="text of the simulated expert reply")
+    ap.add_argument("--no-reply", action="store_true", help="do not simulate an expert reply")
     args = ap.parse_args()
 
     s = get_settings()
@@ -134,6 +164,12 @@ async def main() -> int:
                 print("-> (retry of the same line, expect no second utterance)")
                 await post(tr_url, payload_transcript(bot_id, line))
 
+        # Escalation check (needs the LLM to say needs_expert, i.e. an OpenAI key).
+        if not s.OPENAI_API_KEY:
+            print("LLM not configured, skipping escalation check")
+        else:
+            await check_escalation(http, base, s, meeting_id, events, args)
+
         await asyncio.sleep(1.0)
         for ev in ("bot.call_ended", "bot.done"):
             print(f"-> {ev}")
@@ -152,6 +188,10 @@ async def main() -> int:
     print(f"lines sent: {sent} (+1 duplicate), unique: {unique}")
     print(f"utterance events received: {utterances}")
     others = {k: v for k, v in counts.items() if k != "utterance"}
+    print(
+        f"escalation_created: {counts.get('escalation_created', 0)}  "
+        f"escalation_answered: {counts.get('escalation_answered', 0)}"
+    )
     print(f"other events: {others}  meeting_status: {statuses}")
     ok = utterances == unique
     print("RESULT:", "OK" if ok else "FAIL (utterance events != unique lines)")

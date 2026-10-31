@@ -98,6 +98,15 @@ async def seed_experts() -> None:
         log.warning("expert seed failed: %s", e)
 
 
+def _notifier_for(channel: str):
+    """HACK: without SLACK_BOT_TOKEN, slack experts go to the fake notifier (offline demo/tests)."""
+    if channel == "slack" and not get_settings().SLACK_BOT_TOKEN:
+        from app.notifier import fake  # noqa: F401  registers "fake"
+
+        return get_notifier("fake")
+    return get_notifier(channel)
+
+
 def _spawn(coro) -> asyncio.Task:
     task = asyncio.create_task(coro)
     _tasks.add(task)
@@ -184,7 +193,7 @@ async def _deliver(
 ) -> None:
     """DM the expert and remember the thread. On failure the escalation stays waiting."""
     try:
-        notifier = get_notifier(expert.channel)
+        notifier = _notifier_for(expert.channel)
         if notifier is None:
             log.warning("escalation %s: no notifier for channel %r", esc_id, expert.channel)
             return
@@ -286,7 +295,7 @@ async def _on_reply(channel_id: str, thread_ts: str, text: str, user_id: str) ->
     await _try(
         hub.publish(meeting_id, "escalation_answered", public(row, expert)), "publish answered"
     )
-    notifier = get_notifier(row.get("channel") or "slack")
+    notifier = _notifier_for(row.get("channel") or "slack")
     if notifier is not None:
         note = THANKS_LIVE if live and not late else (THANKS_LATE if live else THANKS_ENDED)
         sent = SentMessage(

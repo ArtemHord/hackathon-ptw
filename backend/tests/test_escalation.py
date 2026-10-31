@@ -60,6 +60,7 @@ def env(monkeypatch):
     for k, v in {
         "OPENAI_API_KEY": "sk-test",
         "OPENAI_CHAT_MODEL": "test-model",
+        "SLACK_BOT_TOKEN": "xoxb-test",
         "DATABASE_URL": "",
     }.items():
         monkeypatch.setenv(k, v)

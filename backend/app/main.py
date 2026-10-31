@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app import (
     agent_voice,
     db,
+    debug,
     escalation,
     hub,
     llm,
@@ -42,6 +43,7 @@ app.include_router(webhooks_slack.router)
 app.include_router(hub.router)
 app.include_router(agent_voice.router)
 app.include_router(speech.router)
+app.include_router(debug.router)  # HACK: offline escalation driver
 
 
 @app.get("/health")

@@ -416,3 +416,28 @@ async def timeout_escalation(escalation_id: str) -> dict[str, Any] | None:
         escalation_id,
     )
     return dict(row) if row else None
+
+
+async def get_escalation(escalation_id: str) -> dict[str, Any] | None:
+    pool = await get_pool()
+    try:
+        row = await pool.fetchrow(
+            f"""select {ESCALATION_COLUMNS} from escalations e
+                left join experts x on x.id = e.expert_id where e.id = $1""",
+            escalation_id,
+        )
+    except asyncpg.DataError:  # not a uuid
+        return None
+    return dict(row) if row else None
+
+
+async def list_escalations(meeting_id: str | None = None) -> list[dict[str, Any]]:
+    pool = await get_pool()
+    rows = await pool.fetch(
+        f"""select {ESCALATION_COLUMNS} from escalations e
+            left join experts x on x.id = e.expert_id
+            where ($1::text is null or e.meeting_id::text = $1)
+            order by e.created_at desc limit 50""",
+        meeting_id,
+    )
+    return [dict(r) for r in rows]
