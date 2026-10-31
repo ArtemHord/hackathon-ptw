@@ -2,7 +2,8 @@
 
 check() runs for every utterance (both modes): free regex filter -> one strict-JSON LLM
 call (extract + judge) against KB/facts -> store -> `fact_check` WS event -> Heads-up in
-the Meet chat when contradicted with high confidence. The KB update part is M5.2.
+the Meet chat when contradicted with high confidence. A confident "change" also creates a
+kb_update_proposals row (approved in the app).
 """
 
 import logging
@@ -15,6 +16,7 @@ from app import db, hub, llm, orchestrator, rag, recall
 log = logging.getLogger(__name__)
 
 MIN_POST_CONFIDENCE = 0.8
+MIN_PROPOSAL_CONFIDENCE = 0.7
 POST_COOLDOWN_S = 60.0
 
 _UNITS = (
@@ -67,6 +69,8 @@ SCHEMA: dict[str, Any] = {
         "source_title": {"type": ["string", "null"]},
         "correction": {"type": ["string", "null"]},
         "chat_message": {"type": ["string", "null"]},
+        "old_text": {"type": ["string", "null"]},
+        "new_text": {"type": ["string", "null"]},
     },
     "required": [
         "claim",
@@ -75,6 +79,8 @@ SCHEMA: dict[str, Any] = {
         "source_title",
         "correction",
         "chat_message",
+        "old_text",
+        "new_text",
     ],
     "additionalProperties": False,
 }
@@ -93,6 +99,10 @@ For "contradicted": source_title = the document title (e.g. "api.md"), correctio
 value only (e.g. "50 rps"), chat_message = one short English line such as "Heads-up: api.md says \
 the rate limit is 50 rps, not 100 (updated 12 Oct)". Include the update date only if the \
 documents show one. Otherwise set source_title, correction and chat_message to null.
+For "change": source_title = the document that would need updating, old_text = the EXACT line or \
+sentence copied verbatim from that document which the change replaces, new_text = that same line \
+rewritten with the new value (keep wording and format). If you cannot copy the exact old line, \
+set old_text and new_text to null. For other verdicts set old_text and new_text to null.
 
 ## Documents
 {docs}
@@ -149,8 +159,34 @@ async def _check(meeting_id: str, utterance: dict[str, Any]) -> None:
         except Exception as e:
             log.warning("factcheck chunk lookup failed: %s", e)
 
+    proposal_id = None
+    if str(result.get("verdict")) == "change" and confidence >= MIN_PROPOSAL_CONFIDENCE and source:
+        old_text = (result.get("old_text") or "").strip()
+        new_text = (result.get("new_text") or "").strip()
+        # HACK: short old_text (e.g. "50") would match anywhere
+        if len(old_text) >= 10 and new_text and old_text != new_text:
+            try:
+                hit = await db.kb_chunk_with_text(str(source), old_text)
+                if hit:
+                    kb_chunk_id = hit["chunk_id"]
+                    proposal_id = await db.insert_proposal(
+                        meeting_id,
+                        doc_id=hit["doc_id"],
+                        chunk_id=hit["chunk_id"],
+                        old_text=old_text,
+                        new_text=new_text,
+                        speaker=utterance.get("speaker"),
+                        ts=float(ts),
+                    )
+                    short = new_text if len(new_text) <= 80 else new_text[:77] + "..."
+                    message = f"Noted: {short}. I'll propose an update to {source}."
+            except Exception as e:
+                log.warning("factcheck proposal failed: %s", e)
+
     posted = False
-    if verdict == "contradicted" and confidence >= MIN_POST_CONFIDENCE and message:
+    if (
+        (verdict == "contradicted" and confidence >= MIN_POST_CONFIDENCE and message) or proposal_id
+    ) and message:
         last = _last_post.get(meeting_id)
         if last is None or time.monotonic() - last >= POST_COOLDOWN_S:
             meeting = await db.get_meeting(meeting_id)
@@ -169,6 +205,7 @@ async def _check(meeting_id: str, utterance: dict[str, Any]) -> None:
         posted=posted,
         ts=float(ts),
         kb_chunk_id=kb_chunk_id,
+        proposal_id=proposal_id,
     )
     await hub.publish(
         meeting_id,
@@ -180,7 +217,7 @@ async def _check(meeting_id: str, utterance: dict[str, Any]) -> None:
             "source": source,
             "correction": correction,
             "ts": ts,
-            "proposal_id": None,  # M5.2
+            "proposal_id": proposal_id,
         },
     )
 

@@ -679,13 +679,14 @@ async def insert_fact_check(
     posted: bool,
     ts: float | None,
     kb_chunk_id: str | None = None,
+    proposal_id: str | None = None,
 ) -> dict[str, Any]:
     pool = await get_pool()
     row = await pool.fetchrow(
         """insert into fact_checks
              (meeting_id, utterance_id, claim, verdict, kb_chunk_id, confidence, correction,
-              posted, ts)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              posted, ts, proposal_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            returning id, meeting_id, claim, verdict, correction, posted, ts""",
         meeting_id,
         utterance_id,
@@ -696,6 +697,7 @@ async def insert_fact_check(
         correction,
         posted,
         ts,
+        proposal_id,
     )
     return dict(row)
 
@@ -711,3 +713,131 @@ async def kb_chunk_for_title(title: str) -> str | None:
         title.strip(),
     )
     return row["id"] if row else None
+
+
+# --- KB update proposals (M5.2) ------------------------------------------------
+
+
+async def kb_chunk_with_text(title: str, needle: str) -> dict[str, Any] | None:
+    """{chunk_id, doc_id} of the chunk of doc `title` that contains `needle` exactly."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """select c.id as chunk_id, d.id as doc_id
+           from kb_chunks c join kb_docs d on d.id = c.doc_id
+           where regexp_replace(lower(d.title), '\\.md$', '')
+               = regexp_replace(lower($1), '\\.md$', '')
+             and position($2 in c.text) > 0
+           limit 1""",
+        title.strip(),
+        needle,
+    )
+    return dict(row) if row else None
+
+
+async def insert_proposal(
+    meeting_id: str,
+    *,
+    doc_id: str,
+    chunk_id: str,
+    old_text: str,
+    new_text: str,
+    speaker: str | None,
+    ts: float | None,
+) -> str:
+    pool = await get_pool()
+    return await pool.fetchval(
+        """insert into kb_update_proposals
+             (meeting_id, doc_id, chunk_id, old_text, new_text, speaker, ts)
+           values ($1, $2, $3, $4, $5, $6, $7) returning id""",
+        meeting_id,
+        doc_id,
+        chunk_id,
+        old_text,
+        new_text,
+        speaker,
+        ts,
+    )
+
+
+_PROPOSAL_SELECT = """select p.id, p.doc_id, d.title as doc_title, p.chunk_id, p.status,
+         p.created_at, p.meeting_id, p.ts, p.speaker, p.old_text, p.new_text
+       from kb_update_proposals p left join kb_docs d on d.id = p.doc_id"""
+
+
+async def list_proposals(include_all: bool = False) -> list[dict[str, Any]]:
+    pool = await get_pool()
+    where = "" if include_all else "where p.status = 'pending'"
+    rows = await pool.fetch(
+        f"{_PROPOSAL_SELECT} {where} order by (p.status = 'pending') desc, p.created_at desc"
+    )
+    return [dict(r) for r in rows]
+
+
+async def get_proposal(proposal_id: str) -> dict[str, Any] | None:
+    pool = await get_pool()
+    row = await pool.fetchrow(f"{_PROPOSAL_SELECT} where p.id = $1", proposal_id)
+    return dict(row) if row else None
+
+
+async def reject_proposal(proposal_id: str) -> dict[str, Any] | None:
+    """pending -> rejected. None when the proposal is missing or no longer pending."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """update kb_update_proposals set status = 'rejected'
+           where id = $1 and status = 'pending' returning id, doc_id""",
+        proposal_id,
+    )
+    return dict(row) if row else None
+
+
+async def approve_proposal(proposal_id: str, embed: Any = None) -> tuple[str, dict | None]:
+    """Atomically replace old_text with new_text in the chunk, bump chunk and doc versions.
+
+    `embed` is an optional async callable(text) -> vector; its failure keeps the text change.
+    Returns (outcome, result): "ok" {doc_id, doc_version}, "missing", "not_pending",
+    "text_not_found".
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn, conn.transaction():
+        p = await conn.fetchrow(
+            "select id, doc_id, chunk_id, old_text, new_text, status "
+            "from kb_update_proposals where id = $1 for update",
+            proposal_id,
+        )
+        if not p:
+            return "missing", None
+        if p["status"] != "pending":
+            return "not_pending", None
+        chunk = None
+        if p["chunk_id"]:
+            chunk = await conn.fetchrow(
+                "select text from kb_chunks where id = $1 for update", p["chunk_id"]
+            )
+        if not chunk or not p["old_text"] or p["old_text"] not in chunk["text"]:
+            return "text_not_found", None
+        new_chunk_text = chunk["text"].replace(p["old_text"], p["new_text"] or "", 1)
+        vec = None
+        if embed is not None:
+            try:
+                vec = await embed(new_chunk_text)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "re-embed failed for proposal %s, keeping text change", proposal_id
+                )
+        version = await conn.fetchval(
+            "update kb_docs set version = version + 1, updated_at = now() "
+            "where id = $1 returning version",
+            p["doc_id"],
+        )
+        await conn.execute(
+            "update kb_chunks set text = $2, version = $3, "
+            "embedding = coalesce($4::vector, embedding) where id = $1",
+            p["chunk_id"],
+            new_chunk_text,
+            version,
+            vec_literal(vec) if vec else None,
+        )
+        await conn.execute(
+            "update kb_update_proposals set status = 'approved' where id = $1", proposal_id
+        )
+    return "ok", {"doc_id": p["doc_id"], "doc_version": version}

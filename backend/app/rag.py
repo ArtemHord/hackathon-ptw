@@ -127,3 +127,13 @@ def backfill_later() -> None:
     task = asyncio.create_task(go())
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
+
+
+async def _embed_one(text: str) -> list[float]:
+    return (await llm.embed([text]))[0]
+
+
+async def apply_proposal(proposal_id: str) -> tuple[str, dict[str, Any] | None]:
+    """Approve a KB proposal: exact-substring replace in its chunk, re-embed (best effort),
+    bump versions. Returns (outcome, {doc_id, doc_version}); see db.approve_proposal."""
+    return await db.approve_proposal(proposal_id, _embed_one)
