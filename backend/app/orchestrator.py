@@ -137,6 +137,10 @@ if it finds nothing relevant, set needs_expert=true right away.
 answer "I created the doc <title>." If it reports that the title exists, say so; you never \
 edit existing documents.
 - Facts returned by these tools count as context you may answer from.
+- If search_knowledge returns an expert's earlier answer to the question being asked, \
+answer from it and attribute it ("Dima said Thursday."): quoting what an expert already \
+said is not a commitment, so set needs_expert=false. If the expert answered a different \
+question, say what they were asked and answered instead of applying it to this question.
 - Never put URLs, links, source names in brackets or markdown in the answer: it is spoken. \
 Sources are posted to the meeting chat separately.
 """

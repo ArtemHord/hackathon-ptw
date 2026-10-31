@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime
 
 import httpx
 import pytest
@@ -72,7 +73,7 @@ def world(monkeypatch):
         return {"expert": "Dima", "escalation_id": "esc_1"}
 
     async def get_meeting(meeting_id):
-        return {"id": meeting_id, "recall_bot_id": "bot_1"}
+        return {"id": meeting_id, "recall_bot_id": "bot_1", "created_at": datetime(2026, 10, 30)}
 
     async def send_chat_message(bot_id, text):
         w["chat"].append((bot_id, text))
@@ -85,12 +86,14 @@ def world(monkeypatch):
         w["docs"].append((title, markdown))
         return {"id": "d_new", "title": title, "version": 1}
 
+    w["facts"] = [
+        {"kind": "facts", "text": "Dima owns billing.", "score": 0.8, "meeting_id": "m0"},
+    ]
+    w["kb"] = [{"kind": "kb", "text": "Rate limit is 50 rps.", "score": 0.9, "doc_title": "API"}]
+
     async def search(query, k=6, kinds=("kb", "facts", "utterances")):
-        w["search"] = (query, k, kinds)
-        return [
-            {"kind": "kb", "text": "Rate limit is 50 rps.", "score": 0.9, "doc_title": "API"},
-            {"kind": "facts", "text": "Dima owns billing.", "score": 0.8, "meeting_id": "m0"},
-        ]
+        w.setdefault("searches", []).append((query, k, kinds))
+        return [it for kind in kinds for it in w.get(kind, [])][:k]
 
     monkeypatch.setattr(db, "get_meeting_mode", get_meeting_mode)
     monkeypatch.setattr(db, "get_brief", get_brief)
@@ -222,14 +225,17 @@ async def test_search_knowledge_round_then_final(world, caplog):
     assert await orchestrator.ask(MID, utt("Atlas, our rate limit?"), "what is our rate limit?")
 
     assert world["said"] == ["The rate limit is 50 requests per second."]
-    assert world["search"] == ("rate limit", 4, ("kb", "facts"))
+    assert sorted(world["searches"]) == [("rate limit", 3, ("kb",)), ("rate limit", 6, ("facts",))]
     second = bodies(route)[1]
     assert second["previous_response_id"] == "resp_1"
     (item,) = second["input"]
     assert item["type"] == "function_call_output" and item["call_id"] == "call_1"
     out = json.loads(item["output"])
-    assert out["results"][0] == {"title": "API", "text": "Rate limit is 50 rps."}
-    assert out["results"][1]["title"] == "Past meeting fact"
+    assert out["results"][0] == {
+        "title": "Past meeting fact",
+        "text": "Someone (meeting 2026-10-30): Dima owns billing.",
+    }
+    assert out["results"][1] == {"title": "API", "text": "Rate limit is 50 rps."}
     assert "path=tools, tools=search_knowledge, rounds=1" in caplog.text
 
 
@@ -442,3 +448,60 @@ async def test_tool_timeout_plus_slow_fallback_is_bounded(world, monkeypatch):
     assert await orchestrator.ask(MID, utt("Atlas, anything?"), "anything new?") is False
     assert loop.time() - t0 < 1.0  # tool cap + fallback bounded by the budget, not 5 s + 5 s
     assert world["said"] == []  # silent failure, as before
+
+
+async def test_search_knowledge_expert_answer_not_crowded_out_by_kb(world):
+    """M8.1b: long KB chunks used to fill the top 4 and hide a short expert answer."""
+    world["kb"] = [
+        {"kind": "kb", "text": f"chunk {i}", "score": 0.9, "doc_title": f"doc{i}"} for i in range(6)
+    ]
+    answer = {
+        "kind": "facts",
+        "text": "Q: when do we migrate to Postgres 17?\nA: Thursday",
+        "score": 0.15,
+        "meeting_id": "m_9",
+        "speaker": "Dima",
+    }
+    brief = {"kind": "facts", "text": "Artem cannot promise dates.", "speaker": "Brief"}
+    world["facts"] = [answer, dict(answer, meeting_id="m_8"), brief, brief, brief]
+    out = await agent_tools.search_knowledge("what did Dima say about the migration?")
+    texts = [r["text"] for r in out["results"]]
+    assert texts == [
+        'Dima (meeting 2026-10-30), asked "when do we migrate to Postgres 17?", answered: Thursday',
+        "Brief (meeting unknown date): Artem cannot promise dates.",
+        "chunk 0",
+        "chunk 1",
+        "chunk 2",
+    ]  # deduped facts first (top 3), then top 3 KB
+
+
+async def test_search_knowledge_meeting_lookup_failure_still_returns(world, monkeypatch):
+    async def boom(meeting_id):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(db, "get_meeting", boom)
+    out = await agent_tools.search_knowledge("billing")
+    assert out["results"][0]["text"] == "Someone (meeting unknown date): Dima owns billing."
+
+
+def test_tools_prompt_lets_agent_quote_an_earlier_expert_answer():
+    assert "earlier answer" in orchestrator.TOOLS_PROMPT
+    assert "not a commitment" in orchestrator.TOOLS_PROMPT
+
+
+async def test_vector_search_single_kind_names_columns(monkeypatch):
+    """A facts-only search used to fail: only the kb branch of the UNION named its columns."""
+    seen = {}
+
+    class Pool:
+        async def fetch(self, sql, *args):
+            seen["sql"] = sql
+            return []
+
+    async def get_pool():
+        return Pool()
+
+    monkeypatch.setattr(db, "get_pool", get_pool)
+    for kind in ("facts", "utterances"):
+        await db.vector_search([0.1], 3, (kind,))
+        assert f"'{kind}' as kind" in seen["sql"] and "as score" in seen["sql"]

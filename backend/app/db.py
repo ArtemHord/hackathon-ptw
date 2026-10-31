@@ -719,15 +719,15 @@ async def vector_search(qvec: list[float], k: int, kinds: tuple[str, ...]) -> li
         )
     if "facts" in kinds:
         parts.append(
-            """(select 'facts', f.text, null, f.meeting_id, null::real, f.speaker,
-                      1 - (f.embedding <=> $1::vector)
+            """(select 'facts' as kind, f.text, null::text as doc_title, f.meeting_id,
+                      null::real as ts, f.speaker, 1 - (f.embedding <=> $1::vector) as score
                from facts f where f.embedding is not null
                order by f.embedding <=> $1::vector limit $2)"""
         )
     if "utterances" in kinds:
         parts.append(
-            """(select 'utterances', u.text, null, u.meeting_id, u.ts_start, u.speaker,
-                      1 - (u.embedding <=> $1::vector)
+            """(select 'utterances' as kind, u.text, null::text as doc_title, u.meeting_id,
+                      u.ts_start as ts, u.speaker, 1 - (u.embedding <=> $1::vector) as score
                from utterances u where u.embedding is not null
                order by u.embedding <=> $1::vector limit $2)"""
         )
