@@ -274,3 +274,145 @@ async def list_experts() -> list[dict[str, Any]]:
            from experts order by created_at, name"""
     )
     return [dict(r) for r in rows]
+
+
+async def get_last_utterances(meeting_id: str, n: int = 3) -> list[dict[str, Any]]:
+    """Last n utterances of the meeting, oldest first."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """select * from (
+             select id, speaker, text, ts_start from utterances
+             where meeting_id = $1 order by ts_start desc limit $2
+           ) t order by ts_start""",
+        meeting_id,
+        n,
+    )
+    return [dict(r) for r in rows]
+
+
+async def append_action_item(meeting_id: str, item: dict[str, Any]) -> None:
+    pool = await get_pool()
+    await pool.execute(
+        """update meetings set action_items = coalesce(action_items, '[]'::jsonb) || $2::jsonb
+           where id = $1""",
+        meeting_id,
+        [item],
+    )
+
+
+# --- facts -------------------------------------------------------------------
+
+
+async def insert_fact(meeting_id: str, speaker: str, text: str, kind: str) -> dict[str, Any]:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """insert into facts (meeting_id, speaker, text, kind) values ($1, $2, $3, $4)
+           returning id, meeting_id, speaker, text, kind""",
+        meeting_id,
+        speaker,
+        text,
+        kind,
+    )
+    return dict(row)
+
+
+# --- escalations -------------------------------------------------------------
+
+ESCALATION_COLUMNS = (
+    "e.id, e.meeting_id, e.expert_id, x.name as expert, e.channel, e.question, e.asked_by, "
+    "e.ts, e.external_msg_id, e.external_channel_id, e.answer, e.status, e.asked_at, "
+    "e.answered_at, e.answered_ts"
+)
+
+
+async def insert_escalation(
+    *,
+    meeting_id: str,
+    expert_id: str | None,
+    channel: str,
+    question: str,
+    asked_by: str,
+    ts: float,
+) -> dict[str, Any]:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"""with e as (
+              insert into escalations (meeting_id, expert_id, channel, question, asked_by, ts)
+              values ($1, $2, $3, $4, $5, $6) returning *
+            )
+            select {ESCALATION_COLUMNS} from e left join experts x on x.id = e.expert_id""",
+        meeting_id,
+        expert_id,
+        channel,
+        question,
+        asked_by,
+        ts,
+    )
+    return dict(row)
+
+
+async def set_escalation_external(
+    escalation_id: str, external_msg_id: str, external_channel_id: str
+) -> None:
+    pool = await get_pool()
+    await pool.execute(
+        "update escalations set external_msg_id = $2, external_channel_id = $3 where id = $1",
+        escalation_id,
+        external_msg_id,
+        external_channel_id,
+    )
+
+
+async def get_escalation_by_external(
+    external_msg_id: str, external_channel_id: str | None = None
+) -> dict[str, Any] | None:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"""select {ESCALATION_COLUMNS} from escalations e
+            left join experts x on x.id = e.expert_id
+            where e.external_msg_id = $1
+              and ($2::text is null or e.external_channel_id is null
+                   or e.external_channel_id = $2)
+            order by e.created_at desc limit 1""",
+        external_msg_id,
+        external_channel_id,
+    )
+    return dict(row) if row else None
+
+
+async def answer_escalation(
+    escalation_id: str, answer: str, answered_ts: float
+) -> dict[str, Any] | None:
+    """First answer wins: sets status answered unless already answered. The row carries
+    prev_status ('waiting' | 'timeout'); None when it was already answered or unknown."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"""with prev as (
+              select id, status from escalations where id = $1 for update
+            ), e as (
+              update escalations u set answer = $2, answered_ts = $3, answered_at = now(),
+                     status = 'answered'
+              from prev where u.id = prev.id and prev.status <> 'answered'
+              returning u.*, prev.status as prev_status
+            )
+            select {ESCALATION_COLUMNS}, e.prev_status
+            from e left join experts x on x.id = e.expert_id""",
+        escalation_id,
+        answer,
+        answered_ts,
+    )
+    return dict(row) if row else None
+
+
+async def timeout_escalation(escalation_id: str) -> dict[str, Any] | None:
+    """waiting -> timeout. None when it is no longer waiting (answered in time)."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"""with e as (
+              update escalations set status = 'timeout'
+              where id = $1 and status = 'waiting' returning *
+            )
+            select {ESCALATION_COLUMNS} from e left join experts x on x.id = e.expert_id""",
+        escalation_id,
+    )
+    return dict(row) if row else None

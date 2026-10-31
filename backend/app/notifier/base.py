@@ -4,6 +4,10 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 
+class NotifierError(RuntimeError):
+    """A notifier could not deliver (HTTP error, ok:false, unknown expert)."""
+
+
 @dataclass
 class Expert:
     name: str

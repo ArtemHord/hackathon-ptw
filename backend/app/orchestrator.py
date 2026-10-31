@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app import agent_voice, db, hub, llm, speech
+from app import agent_voice, db, escalation, hub, llm, speech
 
 log = logging.getLogger(__name__)
 
@@ -71,9 +71,9 @@ _busy: set[str] = set()  # meeting_ids with an answer in progress
 async def on_needs_expert(
     meeting_id: str, question: str, topic: str, asked_by: str
 ) -> str | dict[str, Any] | None:
-    """Escalation hook, replaced in M3. Return None, an expert name, or
+    """Escalation hook (M3.3): escalation.start. Returns None, an expert name, or
     {"expert": name, "escalation_id": id}."""
-    return None
+    return await escalation.start(meeting_id, question, topic, asked_by)
 
 
 def parse_trigger(text: str) -> str | None:

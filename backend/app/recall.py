@@ -1,11 +1,14 @@
 """Recall.ai client: the only module that talks to Recall (SPEC: "Jak agent wchodzi do ...")."""
 
+import logging
 from typing import Any
 from urllib.parse import urlencode
 
 import httpx
 
 from app.config import get_settings
+
+log = logging.getLogger(__name__)
 
 BOT_NAME = "Call Crew (AI) for Artem"
 WAITING_ROOM_TIMEOUT_S = 600
@@ -94,3 +97,16 @@ async def create_bot(meeting_url: str, meeting_id: str) -> dict[str, Any]:
 async def leave_call(bot_id: str) -> None:
     """POST /api/v1/bot/{id}/leave_call/ (decisions.md #18)."""
     await _post(f"/api/v1/bot/{bot_id}/leave_call/")
+
+
+async def send_chat_message(bot_id: str | None, text: str) -> bool:
+    """Best effort: POST /api/v1/bot/{id}/send_chat_message/ (decisions.md #17, body
+    UNCONFIRMED). Never raises; logs and returns False on failure."""
+    if not bot_id or not text:
+        return False
+    try:
+        await _post(f"/api/v1/bot/{bot_id}/send_chat_message/", {"to": "everyone", "message": text})
+        return True
+    except Exception as e:
+        log.warning("recall chat message failed for bot %s: %s", bot_id, e)
+        return False

@@ -11,17 +11,15 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
-from app.notifier.base import Expert, SentMessage, register_notifier
+from app.notifier.base import Expert, NotifierError, SentMessage, register_notifier
+
+__all__ = ["SLACK", "NotifierError", "SlackNotifier", "format_question"]
 
 log = logging.getLogger(__name__)
 
 SLACK_API = "https://slack.com/api"
 TIMEOUT_S = 10.0
 CONTEXT_LINES = 3
-
-
-class NotifierError(RuntimeError):
-    """A notifier could not deliver (HTTP error, ok:false, unknown expert)."""
 
 
 def _esc(s: str) -> str:
