@@ -4,6 +4,7 @@ Agents and `@codex review` check PRs against this file.
 
 | # | Decision | Why |
 |---|----------|-----|
+| 24 | Agent camera = designer orb (`docs/design/agent-clips/`), ported to vanilla JS in the agent page (no React/Babel in Recall's bot browser). Page states idle/listening/thinking/speaking + ask; server→page WS `state` / `ask` / `ask_done`; listening from page-mic level; plate shows "ASKING <EXPERT> ON SLACK" (design placeholder "YES, ATLAS" dropped) | Visible wow on stage; React + Babel standalone (3 MB) too heavy for the bot browser |
 | 23 | OpenAI called via plain httpx (`backend/app/llm.py`, `/v1/chat/completions`, strict json_schema), not the openai SDK; embeddings (M4.1) go through llm.py too | openai SDK 3.x uses httpx2, which respx does not intercept → tests hit the real API |
 | 22 | Agent page lives in `backend/agent_page/index.html` (not repo-root `agent-page/`), served at `GET /agent` | Railway build context = `backend/`; one image, no extra config |
 | 21 | Recall auth header `Authorization: Token <RECALL_API_KEY>` (prefix optional); DB `meetings.mode` stores API enum `notetaker|delegate` (no CHECK; column default `notes` is cosmetic) | https://docs.recall.ai/docs/authentication |
