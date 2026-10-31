@@ -106,6 +106,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 08:57 · push · M8.1b + M9.1 + SCENARIOS.md on main (9c459f5), Artem OK · Railway deploying; next: Artem seeds Supabase (seed_kb + seed_history)
 - 08:50 · M9.1 · local: S3 "10 % off December" 4.5 s via search_knowledge; S4 three keys 3.1 s; Postgres 17 still escalates; sim RESULT OK; 329 tests · local commit; Artem: push + seed_kb.py + seed_history.py on Supabase
 - 08:46 · M9.0 · docs/SCENARIOS.md written; M9.1 seed history → developer · —
 - 08:10 · M8.1b · cause: Dima's fact ranked 7th behind KB chunks + facts-only vector_search SQL bug; fix: facts/KB searched separately, attributed format, prompt rule; live local: "Dima … said Thursday" 4.2 s, fresh Postgres 17 still escalates; 328 tests; review no blockers · local commit, push waits for Artem OK
