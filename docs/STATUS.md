@@ -3,15 +3,15 @@
 Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
-- Milestone: M0
-- In progress: M0 verifier run
+- Milestone: M1
+- In progress: M1.1 Recall client + POST /meetings, /leave (senior-developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
 Cut rules: escalation not end-to-end by 06:30 → drop M5. After 08:30 → bug fixes only. 11:00 → freeze. If M2 not done by 05:30 → start M3 anyway.
 Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack + Recall webhooks point there; ngrok only as fallback for live debugging. During demo runs and after 08:30: no push to main without Artem's OK (deploy wipes in-memory WS hub + active escalations).
 
-### M0 · Fundament (target 03:45) — order M0.1 → M0.2 → M0.4 → M0.3
+### M0 · Fundament (target 03:45) — DONE 03:08 — order M0.1 → M0.2 → M0.4 → M0.3
 - [x] M0.1 Backend skeleton: uv, FastAPI, `/health`, config (all SPEC env vars), ruff, pytest, root `.env.example`
 - [x] M0.2 API contract: `docs/API.pl.md` + `mocks/*.json` incl. `/app/ws` events (Misha blocked on it)
 - [x] M0.4 `backend/Dockerfile` (uvicorn on `0.0.0.0:${PORT:-8000}`), Railway root `backend/`, healthcheck `/health`
@@ -67,6 +67,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:08 · M0 verify · 6/6 PASS (pytest, ruff, /health, docker PORT=9000, migrate ×2, mocks) · contract frozen
 - 03:08 · M0.3 · schema 13 tables + agent_said, migrate ×2 on docker pgvector ok, pytest 6 · a654c75
 - 03:06 · M0.4 · docker build+run PORT=9000 → /health ok, image 482MB · 1b26525
 - 03:05 · M0.2 · contract + 17 mocks (7 WS events incl. meeting_status; one escalation shape; agent_said[] for poll) · 1 review round · 7fe5206
