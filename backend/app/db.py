@@ -180,3 +180,54 @@ async def insert_utterance(
         ts_end,
     )
     return dict(row) if row else None
+
+
+async def get_meeting_mode(meeting_id: str) -> str | None:
+    pool = await get_pool()
+    return await pool.fetchval("select mode from meetings where id = $1", meeting_id)
+
+
+async def get_brief(meeting_id: str) -> str:
+    """Latest brief text for the meeting, "" when there is none."""
+    pool = await get_pool()
+    text = await pool.fetchval(
+        "select text from briefs where meeting_id = $1 order by created_at desc limit 1",
+        meeting_id,
+    )
+    return text or ""
+
+
+async def get_recent_utterances(
+    meeting_id: str, since_ts: float, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Utterances with ts_start >= since_ts (seconds from call start), oldest first."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """select * from (
+             select id, speaker, text, ts_start from utterances
+             where meeting_id = $1 and ts_start >= $2
+             order by ts_start desc limit $3
+           ) t order by ts_start""",
+        meeting_id,
+        since_ts,
+        limit,
+    )
+    return [dict(r) for r in rows]
+
+
+# --- agent_said --------------------------------------------------------------
+
+
+async def insert_agent_said(
+    meeting_id: str, text: str, ts: float | None, in_reply_to: str | None = None
+) -> dict[str, Any]:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """insert into agent_said (meeting_id, text, ts, in_reply_to)
+           values ($1, $2, $3, $4) returning id, meeting_id, text, ts, in_reply_to""",
+        meeting_id,
+        text,
+        ts,
+        in_reply_to,
+    )
+    return dict(row)

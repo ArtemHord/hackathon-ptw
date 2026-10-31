@@ -42,8 +42,10 @@ def _token_ok(token: str | None) -> bool:
 
 
 async def orchestrator_hook(meeting_id: str, utterance: dict[str, Any]) -> None:
-    """Called after every new utterance. No-op until M2.3 (the "Crew, ..." trigger)."""
-    return None
+    """Called after every new utterance: the "Crew, ..." trigger (never raises)."""
+    from app import orchestrator  # lazy: orchestrator -> speech -> this module
+
+    await orchestrator.handle(meeting_id, utterance)
 
 
 def parse_transcript(payload: dict[str, Any]) -> dict[str, Any] | None:

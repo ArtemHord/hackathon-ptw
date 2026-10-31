@@ -4,6 +4,7 @@ Agents and `@codex review` check PRs against this file.
 
 | # | Decision | Why |
 |---|----------|-----|
+| 23 | OpenAI called via plain httpx (`backend/app/llm.py`, `/v1/chat/completions`, strict json_schema), not the openai SDK; embeddings (M4.1) go through llm.py too | openai SDK 3.x uses httpx2, which respx does not intercept → tests hit the real API |
 | 22 | Agent page lives in `backend/agent_page/index.html` (not repo-root `agent-page/`), served at `GET /agent` | Railway build context = `backend/`; one image, no extra config |
 | 21 | Recall auth header `Authorization: Token <RECALL_API_KEY>` (prefix optional); DB `meetings.mode` stores API enum `notetaker|delegate` (no CHECK; column default `notes` is cosmetic) | https://docs.recall.ai/docs/authentication |
 | 20 | Slack: ignore events with `bot_id`, `subtype=bot_message` or `user` == our bot user (`auth.test`); dedupe by `event_id`, skip if `X-Slack-Retry-Num` present (bot_id field UNCONFIRMED in fetched page) | https://docs.slack.dev/reference/events/message · https://docs.slack.dev/apis/events-api/ |

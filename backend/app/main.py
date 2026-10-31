@@ -1,9 +1,13 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import agent_voice, db, hub, meetings, speech, tts, webhooks_recall
+from app import agent_voice, db, hub, llm, meetings, speech, tts, webhooks_recall
+
+# app.* INFO lines (e.g. the orchestrator latency log) are invisible under uvicorn otherwise.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 
 @asynccontextmanager
@@ -14,6 +18,7 @@ async def lifespan(app: FastAPI):
             yield
     finally:
         warm.cancel()
+        await llm.close()
 
 
 app = FastAPI(title="Call Crew", lifespan=lifespan)
