@@ -48,6 +48,13 @@ async def orchestrator_hook(meeting_id: str, utterance: dict[str, Any]) -> None:
     await orchestrator.handle(meeting_id, utterance)
 
 
+async def factcheck_hook(meeting_id: str, utterance: dict[str, Any]) -> None:
+    """Live fact-check of every utterance (M5.1, never raises)."""
+    from app import factcheck  # lazy, like orchestrator
+
+    await factcheck.check(meeting_id, utterance)
+
+
 def parse_transcript(payload: dict[str, Any]) -> dict[str, Any] | None:
     """Return {speaker, text, ts_start, ts_end} or None if the event should be ignored."""
     if payload.get("event") != "transcript.data":
@@ -88,6 +95,7 @@ async def process_transcript(meeting_id: str, payload: dict[str, Any]) -> None:
             "ts": int(row["ts_start"]),
         }
         await hub.publish(meeting_id, "utterance", utterance)
+        _spawn(factcheck_hook(meeting_id, utterance))  # fire-and-forget, own task
         await orchestrator_hook(meeting_id, utterance)
     except Exception:
         log.exception("transcript processing failed for meeting %s", meeting_id)

@@ -663,3 +663,51 @@ async def answered_ts_for_expert(meeting_id: str, expert_name: str) -> int | Non
         expert_name,
     )
     return int(v) if v is not None else None
+
+
+# --- fact checks -------------------------------------------------------------
+
+
+async def insert_fact_check(
+    meeting_id: str,
+    *,
+    utterance_id: str | None,
+    claim: str,
+    verdict: str,
+    confidence: float | None,
+    correction: str | None,
+    posted: bool,
+    ts: float | None,
+    kb_chunk_id: str | None = None,
+) -> dict[str, Any]:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """insert into fact_checks
+             (meeting_id, utterance_id, claim, verdict, kb_chunk_id, confidence, correction,
+              posted, ts)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           returning id, meeting_id, claim, verdict, correction, posted, ts""",
+        meeting_id,
+        utterance_id,
+        claim,
+        verdict,
+        kb_chunk_id,
+        confidence,
+        correction,
+        posted,
+        ts,
+    )
+    return dict(row)
+
+
+async def kb_chunk_for_title(title: str) -> str | None:
+    """A chunk id of the doc whose title matches, ignoring case and a trailing .md."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """select c.id from kb_chunks c join kb_docs d on d.id = c.doc_id
+           where regexp_replace(lower(d.title), '\\.md$', '')
+               = regexp_replace(lower($1), '\\.md$', '')
+           limit 1""",
+        title.strip(),
+    )
+    return row["id"] if row else None
