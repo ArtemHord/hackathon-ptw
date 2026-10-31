@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 1. `git fetch origin && gh pr list --state open --json number,title,headRefName,isDraft,labels,mergeable`.
 2. Oldest-first, for each non-draft PR:
-   - `gh pr checks <n>` and read review comments (Prelint, `@codex review`, reviewer). Unresolved BLOCKER → skip it and note why.
+   - `gh pr checks <n>` and read review comments (`@codex review`, reviewer). Unresolved BLOCKER → skip it and note why.
    - Contract changes (`contracts/`) are merged only if the PR is labeled `contract`.
    - `gh pr merge <n> --squash --delete-branch`.
 3. For PRs that now conflict: comment `Needs rebase on main after #<merged>` — do not resolve another agent's conflicts yourself unless trivial (imports, lockfile).

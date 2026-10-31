@@ -1,45 +1,57 @@
 # AGENTS.md — rules for every coding agent (Claude Code, Codex)
 
-> Single source of truth for agents. CLAUDE.md imports this file, Codex reads it natively.
-> Fill the TODOs right after the stack is chosen (~21:30). Keep this file under ~80 lines.
-
 ## Project
-TODO: one sentence — what we build and for whom.
-**SPEC.md is the source of truth.** If an issue contradicts SPEC.md, follow SPEC.md and say so in the PR.
+Call Crew: an AI agent joins Google Meet / Zoom / Teams through Recall.ai, takes notes, answers for its owner when someone says "Crew, …", and when it does not know, asks the right expert on Slack and speaks the expert's answer back in the same call.
+**SPEC.md (Polish) is the source of truth.** Hero feature = the Slack escalation loop (SPEC: "Eskalacja na Slacku"). If an issue contradicts SPEC.md, follow SPEC.md and say so in the PR.
+Everything the agent says or writes in a call is in English (demo language).
 
-## Stack & commands
-- Install: `TODO` (e.g. `pnpm i` / `pip install -r requirements.txt`)
-- Run dev: `TODO`
-- Test: `TODO` (if no tests — at least a smoke command that proves it starts)
-- Lint/format: `TODO`
-- Env: copy `.env.example` → `.env`. Never read, print or commit `.env`.
+## Stack & commands (run from repo root)
+- Backend: Python 3.12, uv, FastAPI + uvicorn, pydantic v2 + pydantic-settings, httpx (async), asyncpg + pgvector, OpenAI, ElevenLabs TTS (REST), Slack Web API, Recall.ai.
+- DB: Supabase Postgres + pgvector (EU). Migrations are plain SQL in `backend/migrations/*.sql`.
+- Install: `cd backend && uv sync`
+- Run dev: `cd backend && uv run uvicorn app.main:app --reload --port 8000`
+- Public URL for Recall/Slack webhooks: `ngrok http 8000` → set `PUBLIC_BASE_URL`
+- Test: `cd backend && uv run pytest -q` (no real network: mock every external HTTP call with respx)
+- Smoke: `curl -s localhost:8000/health`
+- Lint/format: `cd backend && uv run ruff check --fix . && uv run ruff format .`
+- Migrate / seed: `cd backend && uv run python ../scripts/migrate.py` · `cd backend && uv run python ../scripts/seed_kb.py`
+- Simulate a call without Recall: `cd backend && uv run python ../scripts/simulate_meeting.py`
+- Deploy: Railway (EU) from `backend/Dockerfile`, health check `/health`.
+- Env: copy `.env.example` → `.env`; variable names are in SPEC.md ("Zmienne środowiskowe"). Never read, print or commit `.env`.
+- If you change how the project is installed, run or tested, update this section in the same PR.
 
 ## Repo map
-- `contracts/` — API schema + shared types. **Frozen after 22:00.** Change only via an issue labeled `contract`.
-- `TODO` — frontend
-- `TODO` — backend
-- `SPEC.md` — spec, `notes/` — brief, brainstorm, pitch
+- `backend/app/` — one module per concern: `main.py`, `config.py`, `db.py`, `recall.py`, `orchestrator.py`, `escalation.py`, `notifier/` (base, slack, telegram), `tts.py`, `rag.py`, `factcheck.py`, `postcall.py`
+- `backend/migrations/`, `backend/seed/`, `backend/tests/`
+- `agent-page/index.html` — the bot's "camera" page (vanilla JS, no build), served by FastAPI at `/agent`
+- `scripts/` — migrate, seed_kb, simulate_meeting
+- **API contract = `docs/API.pl.md` + `mocks/*.json`** (skills call this `contracts/`). The iOS app is built against it. Frozen after M0: change only via an issue labeled `contract`, and update the mocks in the same PR.
+- `ios/` — SwiftUI app (later, from Misha's mockup)
+- `docs/decisions.md` — short decision log
+
+## Backend rules
+- External services only through their module (`recall.py`, `tts.py`, `notifier/*`, `rag.py`, one OpenAI client). Routers never call them directly.
+- Webhooks (Recall, Slack, Telegram) answer 200 immediately and process with `asyncio.create_task`; deduplicate retries.
+- Every webhook and WebSocket checks its token (`WEBHOOK_TOKEN`, `DEMO_TOKEN`); Slack requests verify the signature. Ignore messages from our own bot.
+- Model names and IDs come from env (`OPENAI_CHAT_MODEL`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_VOICE_ID`), never hardcoded.
+- Anything SPEC.md marks "do weryfikacji": check official docs first (use the `researcher` subagent), then add one line to `docs/decisions.md`.
+- The agent never makes commitments or deadlines for its owner and never changes the knowledge base without human approval.
+- Single instance: in-memory WebSocket hub, no queues, no Redis.
 
 ## How we work
-- One GitHub issue = one branch `issue-<n>-<slug>` = one PR with `Closes #<n>` in the body.
-- Touch only the files/area listed in the issue. Need something outside it (shared types, contracts, config)? Stop and write it in the PR under **Needs**.
-- Working demo > clean architecture. No auth, no infra, no refactors unless the issue asks.
-- Seed / hardcode data when it saves time; mark it with `HACK:` comment.
-- Prefer boring, well-known libraries. New dependency → one line in the PR why.
-- Ambiguous issue → pick the simplest reasonable option, list it under **Assumptions** in the PR.
-
-## Branches
-`issue-<n>-<slug>` (or the `worktree-issue-<n>` branch `claude -w` creates). Never commit to `main` directly, never force-push.
-Decisions that change architecture or contracts → one line in `docs/decisions.md` (Prelint reviews PRs against it).
+- One GitHub issue = one branch `issue-<n>-<slug>` = one PR with `Closes #<n>`. Never commit to `main` directly, never force-push.
+- Touch only the files/area listed in the issue. Need a shared file (contract, migrations, `config.py`, router list in `main.py`, `pyproject.toml`)? Stop and write it in the PR under **Needs**.
+- Working demo > clean architecture. Seed / hardcode data when it saves time; mark it `HACK:`.
+- Ambiguous issue → pick the simplest option, list it under **Assumptions** in the PR.
 
 ## Code Review Rules
-(Used by `@codex review`, Prelint and the `reviewer` subagent.)
-- Flag only what breaks the demo flow in SPEC.md §4, the API contract in `contracts/`, or leaks secrets.
-- Flag edits outside the issue's "Files / area".
+(Used by `@codex review` and the `reviewer` subagent.)
+- Flag only what breaks the 90-second demo (SPEC "Produkt i demo w 90 sekund"), the API contract, or security: missing token/signature checks, secrets in code, real network calls in tests.
+- Flag edits outside the issue's area.
 - Do not flag style, naming or missing tests on HACK-marked code.
 
 ## Definition of done (before opening a PR)
-1. App starts with the commands above, no new errors in the console.
-2. Every acceptance criterion in the issue checked by actually running something.
-3. Lint/format passes.
+1. `uv run pytest -q` passes, the app starts, `/health` answers.
+2. Every acceptance criterion checked by running something (pytest, curl, `simulate_meeting.py`).
+3. `ruff check` passes.
 4. PR body: `Closes #<n>` · what changed · how verified (commands + result) · Assumptions · Needs.
