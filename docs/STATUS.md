@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M2
-- In progress: M2.3a seed docs (developer)
+- In progress: M2.3b orchestrator "Crew" → LLM → voice (senior-developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -26,7 +26,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 ### M2 · Agent speaks (target 05:30)
 - [x] M2.1 Agent page + `/agent-page/ws`; a test phrase is audible in the call
 - [x] M2.2 ElevenLabs TTS + `POST /tts` + cached "One sec…"
-- [ ] M2.3a Seed docs `backend/seed/{api,roadmap,team}.md` (developer)
+- [x] M2.3a Seed docs `backend/seed/{api,roadmap,team}.md` (developer)
 - [ ] M2.3b Name trigger "Crew" → LLM (brief + docs in prompt) → voice; measure latency (senior-developer)
 - [ ] M2.4 Delegate brief — merged into M2.3b (brief in system prompt + "no commitments for owner" rule)
 
@@ -68,6 +68,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:28 · M2.3a · seed docs; review caught token-lifetime leak (would answer the cache escalation) → removed · bd3eb95
 - 03:27 · M2.2 · tts.py (flash model via env), /tts, filler cache, say(); 47 tests · 318458e
 - 03:25 · M2.1 · /agent page + WS play/tone, is_speaking w/ 90 s TTL; 1 review round (stuck flag); 38 tests · 2b58ac6
 - 03:20 · M1 verify · PASS: auth 401s, simulator 7/7 utterances + in_call/done, DB state ok · live join not tested
