@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     JIRA_API_TOKEN: str = ""
     JIRA_PROJECT_KEY: str = ""
     JIRA_AUTO_CREATE: str = ""  # truthy "1/true/yes": post-call action items -> Jira issues
+    AGENT_TOOLS: str = "true"  # M8.1: in-call tool calling (web_search, KB search, create_doc)
     TRANSCRIPT_PROVIDER: str = "recallai"  # recallai | deepgram (M6.6, decision 28)
     TRANSCRIPT_EXTRA_KEYTERMS: str = ""  # comma-separated aliases appended to the keyterms
 

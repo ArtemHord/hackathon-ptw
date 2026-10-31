@@ -25,6 +25,7 @@ EDITABLE = (
     "JIRA_API_TOKEN",
     "JIRA_PROJECT_KEY",
     "JIRA_AUTO_CREATE",
+    "AGENT_TOOLS",
 )
 SECRETS = frozenset(
     {
