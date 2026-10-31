@@ -10,7 +10,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, field_validator
 
-from app import db, escalation, jira, orchestrator, runtime, telegram_api
+from app import db, escalation, jira, orchestrator, profile, runtime, telegram_api
 from app.config import get_settings
 from app.meetings import ApiError, require_demo_token
 from app.notifier.base import Expert, NotifierError
@@ -55,12 +55,39 @@ async def put_settings(body: dict[str, str]) -> dict[str, Any]:
     unknown = sorted(k for k in body if k not in runtime.EDITABLE)
     if unknown:
         raise ApiError(422, "validation_error", f"Unknown setting: {', '.join(unknown)}")
+    if "DEMO_PROFILE" in body:
+        body = {**body, "DEMO_PROFILE": (body["DEMO_PROFILE"] or "").strip().lower()}
+        if body["DEMO_PROFILE"] not in ("", *profile.PROFILES):
+            allowed = " | ".join(profile.PROFILES)
+            raise ApiError(422, "validation_error", f"DEMO_PROFILE must be {allowed}")
+    _check_formats(body)
     await runtime.save(body)
+    if "DEMO_PROFILE" in body:
+        profile.reset()  # docs, experts, fact-check filter, incidents belong to the old profile
+        profile.current()
     if {"SLACK_BOT_TOKEN"} & body.keys():
         SLACK.reset()  # cached bot user id / email lookups belong to the old workspace
     if {"TELEGRAM_BOT_TOKEN"} & body.keys():
         telegram_api.reset()
     return _settings()
+
+
+# Catch a wrong paste (Client Secret, Verification Token, page text) on save: a bad signing
+# secret otherwise only shows up as 401s on /webhooks/slack and "challenge" errors in Slack.
+FORMATS = {
+    "SLACK_SIGNING_SECRET": (
+        r"[0-9a-f]{32}",
+        "32 hex characters (Basic Information -> Signing Secret)",
+    ),
+    "SLACK_BOT_TOKEN": (r"xoxb-[\w-]+", "a bot token starting with xoxb- (OAuth & Permissions)"),
+}
+
+
+def _check_formats(body: dict[str, str]) -> None:
+    for key, (pattern, hint) in FORMATS.items():
+        value = (body.get(key) or "").strip()
+        if value and not re.fullmatch(pattern, value):
+            raise ApiError(422, "validation_error", f"{key} must be {hint}")
 
 
 # --- integrations -----------------------------------------------------------------
@@ -211,16 +238,18 @@ class ExpertPatch(BaseModel):
 
 def _clean_topics(topics: list[str]) -> list[str]:
     out: list[str] = []
-    for t in topics:
+    for t in escalation.strip_profile(topics):
         t = t.strip()
         if t and t.lower() != OWNER_TOPIC and t not in out:
             out.append(t)
     return out
 
 
-def _db_topics(topics: list[str], is_owner: bool) -> list[str]:
-    """No is_owner column: the owner is the expert with "owner" in topics (db.upsert_experts)."""
-    return [*_clean_topics(topics), *([OWNER_TOPIC] if is_owner else [])]
+def _db_topics(topics: list[str], is_owner: bool, profile_name: str = "acme") -> list[str]:
+    """No is_owner column: the owner is the expert with "owner" in topics (db.upsert_experts).
+    M10: a non-acme expert carries a "profile:<name>" tag (hidden in the API)."""
+    tagged = escalation.tag_profile(_clean_topics(topics), profile_name)
+    return [*tagged, *([OWNER_TOPIC] if is_owner else [])]
 
 
 def _opt(v: str | None) -> str | None:
@@ -240,6 +269,7 @@ def _public_expert(e: dict[str, Any] | Expert) -> dict[str, Any]:
         "slack_user_id": d.get("slack_user_id"),
         "telegram_chat_id": d.get("telegram_chat_id"),
         "is_owner": bool(d.get("is_owner")) or OWNER_TOPIC in topics,
+        "profile": escalation.topics_profile(topics),
     }
 
 
@@ -267,11 +297,14 @@ async def _get_or_404(expert_id: str) -> dict[str, Any]:
 
 @router.get("/experts")
 async def list_experts() -> dict[str, Any]:
+    name = profile.current()
     if get_settings().DATABASE_URL:
-        rows: list[Any] = await db.list_experts()
+        rows: list[Any] = [
+            r for r in await db.list_experts() if escalation.topics_profile(r.get("topics")) == name
+        ]
     else:
         rows = await escalation.load_experts()  # HACK: seed file, read-only
-    return {"items": [_public_expert(r) for r in rows]}
+    return {"items": [{**_public_expert(r), "profile": name} for r in rows]}
 
 
 @router.post("/experts", status_code=201)
@@ -281,7 +314,7 @@ async def create_expert(body: ExpertIn) -> dict[str, Any]:
         {
             "name": body.name,
             "role": body.role.strip(),
-            "topics": _db_topics(body.topics, body.is_owner),
+            "topics": _db_topics(body.topics, body.is_owner, profile.current()),
             "channel": body.channel,
             "email": _opt(body.email),
             "slack_user_id": _opt(body.slack_user_id),
@@ -311,6 +344,7 @@ async def update_expert(expert_id: str, body: ExpertPatch) -> dict[str, Any]:
         fields["topics"] = _db_topics(
             current.get("topics") or [] if topics is None else topics,
             bool(current.get("is_owner")) if is_owner is None else is_owner,
+            escalation.topics_profile(current.get("topics")),  # keeps the expert's profile
         )
     row = await db.update_expert(expert_id, **fields)
     if row is None:

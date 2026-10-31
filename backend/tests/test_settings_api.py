@@ -254,3 +254,20 @@ async def test_jira_test_ok_and_unauthorized():
     assert bad["ok"] is False and "401" in bad["detail"]
     auth = route.calls[0].request.headers["Authorization"]
     assert auth == "Basic " + base64.b64encode(b"a@b.c:jt").decode()
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("SLACK_SIGNING_SECRET", "xxxxx Save."),  # page text pasted (seen on prod)
+        ("SLACK_SIGNING_SECRET", "a" * 31),
+        ("SLACK_BOT_TOKEN", "xapp-1-A0-123"),  # app-level token instead of bot token
+    ],
+)
+async def test_put_rejects_malformed_slack_credentials(key, value):
+    before = runtime.get(key)
+    async with client() as c:
+        r = await c.put("/settings", headers=AUTH, json={key: value})
+    assert r.status_code == 422
+    assert key in r.json()["error"]["message"]
+    assert runtime.get(key) == before  # nothing saved

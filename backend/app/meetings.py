@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app import db, jira, recall
+from app import db, jira, profile, recall
 from app.config import get_settings
 
 log = logging.getLogger(__name__)
@@ -112,8 +112,11 @@ async def create_meeting(body: MeetingCreate) -> dict[str, Any]:
         status="joining",
         started_at=datetime.now(UTC),
     )
-    if body.mode == "delegate" and body.brief and body.brief.strip():
-        await db.insert_brief(m["id"], body.brief.strip())
+    brief = (body.brief or "").strip()
+    if body.mode == "delegate" and not brief:
+        brief = profile.default_brief() or ""  # M10 msp: the INC-024 ticket
+    if body.mode == "delegate" and brief:
+        await db.insert_brief(m["id"], brief)
 
     try:
         bot = await recall.create_bot(m["meeting_url"], m["id"])

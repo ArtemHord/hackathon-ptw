@@ -244,6 +244,15 @@ async def get_all_utterances(meeting_id: str) -> list[dict[str, Any]]:
 # --- agent_said --------------------------------------------------------------
 
 
+async def list_agent_said(meeting_id: str) -> list[dict[str, Any]]:
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "select text, ts from agent_said where meeting_id = $1 order by ts, created_at",
+        meeting_id,
+    )
+    return [dict(r) for r in rows]
+
+
 async def insert_agent_said(
     meeting_id: str, text: str, ts: float | None, in_reply_to: str | None = None
 ) -> dict[str, Any]:
@@ -514,6 +523,19 @@ async def get_escalation_by_external(
                    or e.external_channel_id = $2)
             order by e.created_at desc limit 1""",
         external_msg_id,
+        external_channel_id,
+    )
+    return dict(row) if row else None
+
+
+async def get_open_escalation_by_channel(external_channel_id: str) -> dict[str, Any] | None:
+    """Newest waiting (else timed-out) escalation delivered to this DM channel."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"""select {ESCALATION_COLUMNS} from escalations e
+            left join experts x on x.id = e.expert_id
+            where e.external_channel_id = $1 and e.status in ('waiting', 'timeout')
+            order by (e.status = 'waiting') desc, e.created_at desc limit 1""",
         external_channel_id,
     )
     return dict(row) if row else None
