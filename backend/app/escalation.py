@@ -101,8 +101,9 @@ async def seed_experts() -> None:
 
 
 def _notifier_for(channel: str):
-    """HACK: without SLACK_BOT_TOKEN, slack experts go to the fake notifier (offline demo/tests)."""
-    if channel == "slack" and not runtime.get("SLACK_BOT_TOKEN"):
+    """HACK: without the channel's bot token, experts go to the fake notifier (offline demo)."""
+    token = {"slack": "SLACK_BOT_TOKEN", "telegram": "TELEGRAM_BOT_TOKEN"}.get(channel)
+    if token and not runtime.get(token):
         from app.notifier import fake  # noqa: F401  registers "fake"
 
         return get_notifier("fake")

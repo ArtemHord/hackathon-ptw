@@ -4,6 +4,7 @@ All behind `Authorization: Bearer DEMO_TOKEN`; errors in the API.pl.md shape.
 """
 
 import logging
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends
@@ -115,6 +116,7 @@ async def _test_telegram() -> dict[str, Any]:
         return {"ok": False, "detail": str(e), "bot_username": None}
     username = me.get("username")
     base = get_settings().PUBLIC_BASE_URL
+    secret = runtime.get("TELEGRAM_WEBHOOK_SECRET")
     if not base:
         return {
             "ok": False,
@@ -122,10 +124,16 @@ async def _test_telegram() -> dict[str, Any]:
             "webhook not registered",
             "bot_username": username,
         }
+    if not secret or not re.fullmatch(r"[A-Za-z0-9_-]{1,256}", secret):
+        why = "is not set" if not secret else "may only contain A-Z a-z 0-9 _ - (1-256 chars)"
+        return {
+            "ok": False,
+            "detail": f"Bot @{username} reachable, but the webhook secret {why}: "
+            "webhook not registered",
+            "bot_username": username,
+        }
     try:
-        await telegram_api.set_webhook(
-            _public("/webhooks/telegram"), runtime.get("TELEGRAM_WEBHOOK_SECRET")
-        )
+        await telegram_api.set_webhook(_public("/webhooks/telegram"), secret)
     except telegram_api.TelegramError as e:
         return {"ok": False, "detail": str(e), "bot_username": username}
     return {
