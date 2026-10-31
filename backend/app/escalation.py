@@ -50,6 +50,112 @@ def _named(text: str, experts: list[Expert]) -> Expert | None:
     return None
 
 
+# "Atlas, ask Artem whether ..." -> look the person up in the Slack workspace (M10.2), so any
+# teammate can be asked by name without being set up under /ui -> Experts first.
+_ASK_RE = re.compile(
+    r"\b(?:ask|contact|ping|message|check with)\s+@?([a-z][\w.'-]*(?:\s+[a-z][\w.'-]*)?)", re.I
+)
+_NOT_A_NAME = {
+    "him",
+    "her",
+    "them",
+    "the",
+    "someone",
+    "somebody",
+    "everyone",
+    "a",
+    "an",
+    "our",
+    "my",
+    "your",
+    "if",
+    "whether",
+    "about",
+    "for",
+    "on",
+    "slack",
+    "team",
+}
+
+
+def requested_names(topic: str, question: str) -> list[str]:
+    """Names to look up for an explicit "ask/ping/check with <name>" request, best first."""
+    m = _ASK_RE.search(question or "")
+    if m is None:
+        return []
+    out: list[str] = []
+    t = (topic or "").strip()
+    if t and t.lower() != "owner":
+        out.append(t)
+    words = [w for w in m.group(1).split() if w.lower() not in _NOT_A_NAME]
+    if words:
+        out += [" ".join(words), words[0]]
+    return list(dict.fromkeys(out))
+
+
+async def slack_person(topic: str, question: str) -> Expert | None:
+    """The Slack workspace member asked for by name, remembered as an expert. None if the
+    question is not an explicit request, Slack is not set up or nobody matches."""
+    names = requested_names(topic, question)
+    if not names or not runtime.get("SLACK_BOT_TOKEN"):
+        return None
+    from app.notifier.slack import SLACK  # lazy: keeps the import graph as before
+
+    for name in names:
+        try:
+            user = await SLACK.find_user(name)
+        except Exception as e:
+            log.warning("slack directory lookup failed for %r: %s", name, e)
+            return None
+        if user:
+            log.info("ask-by-name %r -> slack %s (%s)", name, user["name"], user["id"])
+            return await _remember_person(user)
+    log.info("ask-by-name: nobody in the workspace matches %s", names)
+    return None
+
+
+async def _remember_person(user: dict[str, str]) -> Expert:
+    experts = await load_experts()
+    for e in experts:
+        if e.slack_user_id == user["id"]:
+            return e
+    same = next((e for e in experts if e.name.lower() == user["name"].lower()), None)
+    if not get_settings().DATABASE_URL:
+        return Expert(
+            name=user["name"],
+            role="Slack workspace member",
+            topics=[],
+            channel="slack",
+            slack_user_id=user["id"],
+        )
+    if same is not None and same.id:
+        await db.update_expert(same.id, slack_user_id=user["id"], channel="slack")
+    else:
+        tag = [] if profile.current() == "acme" else [f"{PROFILE_TAG}{profile.current()}"]
+        await db.insert_expert(
+            {
+                "name": user["name"],
+                "role": "Slack workspace member",
+                "topics": tag,
+                "channel": "slack",
+                "slack_user_id": user["id"],
+            }
+        )
+    from app import orchestrator  # lazy: orchestrator imports this module
+
+    orchestrator._experts_cache = None
+    for e in await load_experts(refresh=True):
+        if e.slack_user_id == user["id"]:
+            return e
+    return Expert(
+        name=user["name"],
+        role="Slack workspace member",
+        topics=[],
+        channel="slack",
+        slack_user_id=user["id"],
+    )
+
+
 def match_expert(topic: str, experts: list[Expert], question: str = "") -> Expert:
     """A named expert (topic first, then the question) wins; else the best token/substring
     overlap of topic vs expert topics; owner as fallback."""
@@ -240,7 +346,9 @@ async def start(meeting_id: str, question: str, topic: str, asked_by: str) -> di
     """Orchestrator hook. Returns {"expert", "escalation_id"} before any Slack I/O; None if the
     escalation could not be recorded. Never raises."""
     try:
-        expert = match_expert(topic, await load_experts(), question)
+        expert = await slack_person(topic, question) or match_expert(
+            topic, await load_experts(), question
+        )
         meeting, recent = await asyncio.gather(
             _try(db.get_meeting(meeting_id), "get_meeting"),
             _try(db.get_last_utterances(meeting_id, CONTEXT_LINES), "get_last_utterances", []),
@@ -358,6 +466,19 @@ async def on_expert_reply(channel_id: str, thread_ts: str, text: str, user_id: s
         await _on_reply(channel_id, thread_ts, (text or "").strip(), user_id)
     except Exception:
         log.exception("expert reply handling failed (thread %s)", thread_ts)
+
+
+async def on_expert_dm(channel_id: str, text: str, user_id: str) -> None:
+    """A plain DM (not in the thread), e.g. typed on a phone: answers the open question that
+    was sent to this DM channel. Never raises."""
+    try:
+        esc = await db.get_open_escalation_by_channel(channel_id)
+        if esc is None or not esc.get("external_msg_id"):
+            log.info("DM in %s without an open question ignored", channel_id)
+            return
+        await _on_reply(channel_id, esc["external_msg_id"], (text or "").strip(), user_id)
+    except Exception:
+        log.exception("expert DM handling failed (%s)", channel_id)
 
 
 async def _on_reply(channel_id: str, thread_ts: str, text: str, user_id: str) -> None:

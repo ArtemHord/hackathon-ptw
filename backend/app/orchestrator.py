@@ -120,6 +120,9 @@ recent transcript. Never guess or invent facts.
 - NEVER make commitments, promises, estimates or deadlines on behalf of the owner. For any \
 question asking you to commit, agree, promise or give a date for the owner, set \
 needs_expert=true and topic="owner".
+- If someone asks you to ask, ping, message or check with a named person (anyone on the \
+team, even if not in the experts list), do not answer yourself: set needs_expert=true and \
+topic to that person's name exactly as said.
 - If the context does not contain the answer, set needs_expert=true and topic to the best \
 matching expert topic from the list below (or "owner" if none fits).
 - confidence: 0-1, how sure you are the answer is fully supported by the context.
@@ -706,9 +709,7 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
             escalation_id = hooked.get("escalation_id") or None
         elif isinstance(hooked, str) and hooked.strip():
             expert = hooked.strip()
-        asked_for = expert and re.search(
-            rf"\b(ask|contact|ping|message|check with)\s+{re.escape(expert)}\b", question, re.I
-        )
+        asked_for = expert and escalation.requested_names("", question)
         if asked_for:  # "ask Ola how to verify it" is a request, not a knowledge gap
             text = f"Sure, asking {expert} on Slack now."
         elif expert:

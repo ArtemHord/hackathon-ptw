@@ -528,6 +528,19 @@ async def get_escalation_by_external(
     return dict(row) if row else None
 
 
+async def get_open_escalation_by_channel(external_channel_id: str) -> dict[str, Any] | None:
+    """Newest waiting (else timed-out) escalation delivered to this DM channel."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"""select {ESCALATION_COLUMNS} from escalations e
+            left join experts x on x.id = e.expert_id
+            where e.external_channel_id = $1 and e.status in ('waiting', 'timeout')
+            order by (e.status = 'waiting') desc, e.created_at desc limit 1""",
+        external_channel_id,
+    )
+    return dict(row) if row else None
+
+
 async def answer_escalation(
     escalation_id: str, answer: str, answered_ts: float
 ) -> dict[str, Any] | None:

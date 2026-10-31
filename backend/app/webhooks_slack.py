@@ -86,10 +86,29 @@ def parse_reply(event: dict[str, Any]) -> tuple[str, str, str, str] | None:
     return channel, thread_ts, text, user
 
 
+def parse_dm(event: dict[str, Any]) -> tuple[str, str, str] | None:
+    """(channel, text, user) for a human top-level message in a DM with the bot, else None."""
+    if event.get("type") != "message" or event.get("channel_type") != "im":
+        return None
+    if event.get("bot_id") or event.get("subtype") in IGNORED_SUBTYPES:
+        return None
+    if event.get("thread_ts") and event.get("thread_ts") != event.get("ts"):
+        return None  # thread replies go through parse_reply
+    channel, user = event.get("channel"), event.get("user")
+    text = (event.get("text") or "").strip()
+    if not channel or not user or not text:
+        return None
+    return channel, text, user
+
+
 async def process_event(event: dict[str, Any]) -> None:
     try:
         reply = parse_reply(event)
         if reply is None:
+            dm = parse_dm(event)
+            if dm is None or dm[2] == await SLACK.bot_user_id():
+                return
+            await escalation.on_expert_dm(*dm)
             return
         channel, thread_ts, text, user = reply
         if user == await SLACK.bot_user_id():
