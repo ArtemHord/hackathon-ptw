@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M2
-- In progress: M2.1 agent page + /agent-page/ws (senior-developer)
+- In progress: M2.2 ElevenLabs TTS + POST /tts + "One sec…" (developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -24,7 +24,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M1.4 `scripts/simulate_meeting.py` + demo-scenario fixture
 
 ### M2 · Agent speaks (target 05:30)
-- [ ] M2.1 Agent page + `/agent-page/ws`; a test phrase is audible in the call
+- [x] M2.1 Agent page + `/agent-page/ws`; a test phrase is audible in the call
 - [ ] M2.2 ElevenLabs TTS + `POST /tts` + cached "One sec…"
 - [ ] M2.3 Name trigger "Crew" → LLM (brief + docs in prompt) → voice; measure latency
 - [ ] M2.4 Delegate brief
@@ -64,9 +64,10 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [ ] Recall.ai API key (eu-central-1)
 - [ ] Slack app (SPEC "Konfiguracja Slack app"); Request URL after M3.2 is deployed
 - [ ] ElevenLabs voice id + OpenAI key
-- Live checks pending: Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
+- Live checks pending: LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:25 · M2.1 · /agent page + WS play/tone, is_speaking w/ 90 s TTL; 1 review round (stuck flag); 38 tests · 2b58ac6
 - 03:20 · M1 verify · PASS: auth 401s, simulator 7/7 utterances + in_call/done, DB state ok · live join not tested
 - 03:20 · M1.4 · simulator replays demo (7 lines, dedup shown, status in_call/done); 31 tests · bb3b6ab
 - 03:18 · M1.3 · status webhook mapping + terminal-state guard, postcall_hook stub; 30 tests · 609ed4d
