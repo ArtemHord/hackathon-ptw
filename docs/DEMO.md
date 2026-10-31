@@ -34,6 +34,23 @@
 - Bot stuck in waiting room → host admits; auto-leaves after 600 s.
 - Summary missing → it runs on `bot.done` or 5 s after Leave; check Railway logs for "LLM failed".
 
+## E2E with integrations (live Meet, one call, ~10 min)
+Setup: `migrate.py` (002) · `/ui` → Integrations: Slack / Jira / Telegram keys + **Test** = ok · `/ui` → Experts: real emails, channel, **Test** = DM arrives.
+| # | Say (or do) | Expect | Check |
+|---|---|---|---|
+| 1 | "Okay Atlas, what did Artem finish this week?" | voice: SDK v2 (brief) | log `crew latency` ≤ 5 s |
+| 2 | "Atlas, what is our API rate limit?" | "50 requests per second" (docs) | no escalation |
+| 3 | "Atlas, what is the latest stable Python version?" (M8) | voice answer + ≤2 source URLs in Meet chat | log `tools=web_search` |
+| 4 | "Atlas, what did Dima say last time about the migration?" (M8) | answer from past-call facts | log `tools=search_knowledge` |
+| 5 | "Atlas, create a doc with the decisions from this call." (M8) | "I created the doc …" | `/ui` → KB: new doc |
+| 6 | "Atlas, when do we migrate to Postgres 17?" | "asking Dima" → Slack DM → reply in thread "Thursday" → "Dima says: Thursday" | orb ask → flash; Meet chat |
+| 7 | same with expert channel = telegram | Telegram message → reply → spoken | |
+| 8 | "Atlas, what's the status of PTW-1?" (real key) | status / assignee / due | log `jira lookup` |
+| 9 | Escalate, nobody replies 120 s | spoken timeout line; Jira "Follow-up:" issue | Jira board |
+| 10 | "Our API limit is 100 requests per second." | Meet chat heads-up 50 rps | |
+| 11 | App/`/ui` → Leave | summary + action items; "→ Jira" button creates issue | `/ui` → Meeting |
+Must not happen: #6 answered from the web instead of escalating; agent promising a date for Artem.
+
 ## Measure (each run)
 - Railway logs: `crew latency` lines (trigger→llm→tts+push, ms). Target total ≤ 5 s.
 - Note: answer correct? escalation round-trip seconds? fact-check posted?
