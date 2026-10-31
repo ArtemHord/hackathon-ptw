@@ -74,6 +74,12 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M8.1 Tool calling via Responses API: `web_search` + `search_knowledge` + `create_doc` (new docs only), 9 s cap, fallback to chat_json; internal questions still escalate (senior-developer, worktree ../hackathon-ptw-m8)
 - [ ] M8.2 Live test: web question + doc request + Postgres 17 escalation (Artem)
 
+### M9 · Demo content + scenarios (Artem 08:45; data, not features)
+- [x] M9.0 `docs/SCENARIOS.md`: integrations setup for the second dev, fake company Acme + customer Northwind, Jira tickets PTW-1..5, past-call history, scenarios S1–S13, fact-check lines F1–F5 + P1
+- [ ] M9.1 `seed/customers.md` + `scripts/seed_history.py` (2 backdated past calls) (developer)
+- [ ] M9.2 Second dev: run SCENARIOS.md §1 setup + §5 tests, fill §6 results
+- [ ] (Artem decides) spoken fact-check interjection behind a flag
+
 ## Research
 - [x] R1 SPEC "Do weryfikacji" blocking M1–M3 → `docs/decisions.md` (Recall output_media+recording_config, meeting chat endpoint, bot status events; Slack url_verification + signature)
 
@@ -100,6 +106,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 08:46 · M9.0 · docs/SCENARIOS.md written; M9.1 seed history → developer · —
 - 08:10 · M8.1b · cause: Dima's fact ranked 7th behind KB chunks + facts-only vector_search SQL bug; fix: facts/KB searched separately, attributed format, prompt rule; live local: "Dima … said Thursday" 4.2 s, fresh Postgres 17 still escalates; 328 tests; review no blockers · local commit, push waits for Artem OK
 - 08:06 · E2E local (verifier) · 5/6 PASS: hero sim RESULT OK; web_search 4.3 s; create_doc 7.6 s + duplicate refused; Postgres 17 escalates (no web) 2.7 s; AGENT_TOOLS=false fallback ok · FAIL c: in-call "what did Dima say about the migration?" escalates again instead of using Dima's answer → M8.1b senior-developer · —
 - 08:01 · M7.6 · Artem: 002_settings.sql applied on Supabase → /ui settings writable · —
