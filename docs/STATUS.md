@@ -100,6 +100,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 08:01 · M7.6 · Artem: 002_settings.sql applied on Supabase → /ui settings writable · —
 - 07:59 · E2E · prod /health ok; /settings: Slack, Telegram, Jira all unset; verifier started on local E2E (hero + web_search/search_knowledge/create_doc/escalation/AGENT_TOOLS off) · —
 - 07:57 · M8.1 · blockers fixed (14 s total budget, create_doc lock + casefold); 324 tests, ruff green; merged m8-agent-tools → main · 5df1fa8 · pushed
 - 07:58 · M8.1 · built (321 tests; live smoke: web_search 3.5–4.2 s, Postgres 17 still escalates 3.6–5.6 s); review: 2 blockers (stacked 9 s+15 s timeouts, create_doc race/case) → back to senior-developer · —
