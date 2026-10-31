@@ -118,8 +118,10 @@ FINAL = ("done", "failed")
 
 
 async def postcall_hook(meeting_id: str) -> None:
-    """Called once when the bot is done. No-op until M4.2."""
-    return None  # TODO M4.2
+    """Called once when the bot is done: summary, decisions, action items, facts (M4.2)."""
+    from app import postcall  # lazy: postcall -> llm, hub
+
+    await postcall.run(meeting_id)
 
 
 async def process_status(payload: dict[str, Any]) -> None:

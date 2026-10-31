@@ -136,7 +136,11 @@ async def leave_meeting(meeting_id: str) -> dict[str, Any]:
             log.warning("Recall leave_call failed for %s: %s", meeting_id, e)
             raise ApiError(502, "upstream_error", "Recall could not remove the bot") from e
     # DB status stays as is until the bot.done webhook (M1.3) flips it to done.
-    # TODO M4.2 postcall: post-call summary starts on bot.done (decisions.md #16), not here.
+    # M4.2: bot.done (decisions.md #16) triggers postcall; this is the fallback when that
+    # webhook is not configured. The idempotent guard in postcall.run prevents a double run.
+    from app import postcall
+
+    postcall.schedule_after_leave(meeting_id)
     return {"id": meeting_id, "status": "done", "summary_status": "processing"}
 
 

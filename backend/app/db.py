@@ -31,6 +31,8 @@ MEETING_UPDATABLE = {
     "started_at",
     "ended_at",
     "summary",
+    "decisions",
+    "action_items",
 }
 
 
@@ -212,6 +214,17 @@ async def get_recent_utterances(
         meeting_id,
         since_ts,
         limit,
+    )
+    return [dict(r) for r in rows]
+
+
+async def get_all_utterances(meeting_id: str) -> list[dict[str, Any]]:
+    """Full transcript, oldest first (post-call summary)."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "select speaker, text, ts_start from utterances where meeting_id = $1 "
+        "order by ts_start, created_at",
+        meeting_id,
     )
     return [dict(r) for r in rows]
 
