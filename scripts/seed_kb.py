@@ -16,7 +16,7 @@ from app import db, rag  # noqa: E402
 from app.config import get_settings  # noqa: E402
 
 SEED = ROOT / "backend" / "seed"
-FILES = ("api.md", "roadmap.md", "team.md")
+FILES = ("api.md", "roadmap.md", "team.md", "customers.md")
 
 
 async def main() -> None:

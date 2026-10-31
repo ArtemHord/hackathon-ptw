@@ -1,0 +1,58 @@
+{
+  "meetings": [
+    {
+      "id": "m_hist_northwind",
+      "title": "Northwind onboarding sync",
+      "started_at": "2026-10-10T14:00:00+00:00",
+      "ended_at": "2026-10-10T14:25:00+00:00",
+      "summary": "Artem, Julian and Sarah Chen (Northwind) agreed how to cover Northwind's Black Friday peak of about 120 requests per second with three API keys. Webhook retries ship by 14 November and a CSV export of events by 28 November. If the export is late, Northwind gets 10 % off the December invoice.",
+      "decisions": [
+        "Northwind gets three API keys, 50 requests per second each, for the Black Friday peak.",
+        "If the CSV export is late, Northwind gets 10 % off the December invoice."
+      ],
+      "action_items": [
+        {"owner": "Julian", "text": "Ship webhook retries with backoff", "due": "14 November"},
+        {"owner": "Artem", "text": "Deliver the CSV export of events for Northwind's finance team", "due": "28 November"}
+      ],
+      "utterances": [
+        {"speaker": "Sarah Chen", "text": "Our Black Friday peak is about 120 requests per second.", "ts_start": 60},
+        {"speaker": "Julian", "text": "Standard limit is 50 per second per key, so we'll give you three API keys for the peak.", "ts_start": 75},
+        {"speaker": "Sarah Chen", "text": "We lost events last month, we need webhook retries.", "ts_start": 120},
+        {"speaker": "Julian", "text": "Retries with backoff ship by 14 November.", "ts_start": 135},
+        {"speaker": "Artem", "text": "We'll add a CSV export of events for your finance team by 28 November.", "ts_start": 200},
+        {"speaker": "Sarah Chen", "text": "If the export slips we'd like 10 % off the December invoice.", "ts_start": 230},
+        {"speaker": "Artem", "text": "Agreed, 10 % off December if it's late.", "ts_start": 245}
+      ],
+      "facts": [
+        {"speaker": "Julian", "kind": "number", "text": "Northwind gets 3 API keys at 50 requests per second each for the Black Friday peak (about 120 rps), agreed on the 10 October call."},
+        {"speaker": "Julian", "kind": "date", "text": "Webhook retries with backoff ship by 14 November (owner: Julian), promised to Northwind on the 10 October call."},
+        {"speaker": "Artem", "kind": "date", "text": "CSV export of events for Northwind is due by 28 November (owner: Artem), promised on the 10 October call."},
+        {"speaker": "Artem", "kind": "decision", "text": "On the 10 October call Artem agreed that Northwind gets 10 % off the December invoice if the CSV export is late (after 28 November)."}
+      ]
+    },
+    {
+      "id": "m_hist_weekly",
+      "title": "Weekly sync",
+      "started_at": "2026-10-24T10:00:00+00:00",
+      "ended_at": "2026-10-24T10:30:00+00:00",
+      "summary": "Weekly team sync. The rate limit stays at 50 rps until the review, and the billing design is final, so the iOS build starts next week.",
+      "decisions": [
+        "The rate limit stays at 50 rps until the review.",
+        "The billing design is final; the iOS build starts next week."
+      ],
+      "action_items": [
+        {"owner": "Julian", "text": "Run the rate limit review", "due": null},
+        {"owner": "Misha", "text": "Start the iOS build of the billing page", "due": "next week"}
+      ],
+      "utterances": [
+        {"speaker": "Julian", "text": "The rate limit stays at 50 rps until the review.", "ts_start": 90},
+        {"speaker": "Misha", "text": "The billing design is final, and the iOS build starts next week.", "ts_start": 150},
+        {"speaker": "Artem", "text": "Good, let's keep going.", "ts_start": 180}
+      ],
+      "facts": [
+        {"speaker": "Julian", "kind": "decision", "text": "The rate limit stays at 50 rps until the review (decided in the 24 October weekly sync)."},
+        {"speaker": "Misha", "kind": "decision", "text": "The billing design is final and the iOS build starts the week after the 24 October weekly sync (owner: Misha)."}
+      ]
+    }
+  ]
+}
