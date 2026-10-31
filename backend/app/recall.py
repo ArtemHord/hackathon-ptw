@@ -105,7 +105,9 @@ async def send_chat_message(bot_id: str | None, text: str) -> bool:
     if not bot_id or not text:
         return False
     try:
-        await _post(f"/api/v1/bot/{bot_id}/send_chat_message/", {"to": "everyone", "message": text[:500]})
+        await _post(
+            f"/api/v1/bot/{bot_id}/send_chat_message/", {"to": "everyone", "message": text[:500]}
+        )
         return True
     except Exception as e:
         log.warning("recall chat message failed for bot %s: %s", bot_id, e)
