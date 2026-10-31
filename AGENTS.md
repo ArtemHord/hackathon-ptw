@@ -2,7 +2,7 @@
 
 ## Project
 Call Crew: an AI agent joins Google Meet / Zoom / Teams through Recall.ai, takes notes, answers for its owner when someone says "Crew, …", and when it does not know, asks the right expert on Slack and speaks the expert's answer back in the same call.
-**SPEC.md (Polish) is the source of truth.** Hero feature = the Slack escalation loop (SPEC: "Eskalacja na Slacku"). If an issue contradicts SPEC.md, follow SPEC.md and say so in the PR.
+**SPEC.md (Polish, symlink to `docs/SPEC.pl.md` — edit the file in `docs/`) is the source of truth.** It is ~450 lines: read only the sections your task needs. Hero feature = the Slack escalation loop (SPEC: "Eskalacja na Slacku"). If an issue contradicts SPEC.md, follow SPEC.md and say so in the PR.
 Everything the agent says or writes in a call is in English (demo language).
 
 ## Stack & commands (run from repo root)
@@ -25,7 +25,7 @@ Everything the agent says or writes in a call is in English (demo language).
 - `backend/migrations/`, `backend/seed/`, `backend/tests/`
 - `agent-page/index.html` — the bot's "camera" page (vanilla JS, no build), served by FastAPI at `/agent`
 - `scripts/` — migrate, seed_kb, simulate_meeting
-- **API contract = `docs/API.pl.md` + `mocks/*.json`** (skills call this `contracts/`). The iOS app is built against it. Frozen after M0: change only via an issue labeled `contract`, and update the mocks in the same PR.
+- **API contract = `docs/API.pl.md` + `mocks/*.json`**. The iOS app is built against it. Frozen after M0: change only via an issue labeled `contract`, and update the mocks in the same PR.
 - `ios/` — SwiftUI app (later, from Misha's mockup)
 - `docs/decisions.md` — short decision log
 
@@ -39,8 +39,8 @@ Everything the agent says or writes in a call is in English (demo language).
 - Single instance: in-memory WebSocket hub, no queues, no Redis.
 
 ## How we work
-- One GitHub issue = one branch `issue-<n>-<slug>` = one PR with `Closes #<n>`. Never commit to `main` directly, never force-push.
-- Touch only the files/area listed in the issue. Need a shared file (contract, migrations, `config.py`, router list in `main.py`, `pyproject.toml`)? Stop and write it in the PR under **Needs**.
+- Backend runs in orchestrator mode: tasks live in `docs/STATUS.md`; the orchestrator commits each reviewed task to `main` as `<task-id>: <what>`. Parallel Codex tasks: one GitHub issue = one branch `issue-<n>-<slug>` = one PR with `Closes #<n>`. Never force-push.
+- Touch only the files/area listed in the brief or issue. Wiring a router into `main.py`, a setting into `config.py` or a dependency via `uv add` is fine — mention it. API contract or migrations outside the brief: minimal change, listed under **Needs**.
 - Working demo > clean architecture. Seed / hardcode data when it saves time; mark it `HACK:`.
 - Ambiguous issue → pick the simplest option, list it under **Assumptions** in the PR.
 
@@ -54,4 +54,4 @@ Everything the agent says or writes in a call is in English (demo language).
 1. `uv run pytest -q` passes, the app starts, `/health` answers.
 2. Every acceptance criterion checked by running something (pytest, curl, `simulate_meeting.py`).
 3. `ruff check` passes.
-4. PR body: `Closes #<n>` · what changed · how verified (commands + result) · Assumptions · Needs.
+4. Report (or PR body): `Closes #<n>` if there is an issue · what changed · how verified (commands + result) · Assumptions · Needs.

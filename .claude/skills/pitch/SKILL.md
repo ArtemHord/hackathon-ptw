@@ -9,7 +9,7 @@ Inputs: `SPEC.md`, `notes/brief.md` (judging criteria, partner's problem), what 
 Write `notes/PITCH.md`:
 1. **Hook (15 s)** — the problem as one concrete scene + one number.
 2. **Who hurts (15 s)** — the user from the partner's world, in their words.
-3. **Live demo (90 s)** — exact click path from SPEC "Demo script", the wow moment named. Only features that work right now.
+3. **Live demo (90 s)** — exact click path from SPEC.md section "Produkt i demo w 90 sekund", the wow moment named. Only features that work right now.
 4. **How it works (25 s)** — one architecture sentence, where OpenAI / ElevenLabs / partner tech is used.
 5. **Why it matters for <partner> (20 s)** — tie to their product/metric explicitly.
 6. **Next step (10 s)** — what we'd build in week 1.

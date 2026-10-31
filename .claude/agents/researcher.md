@@ -3,6 +3,7 @@ name: researcher
 description: Looks up how a library, SDK or API works (OpenAI, ElevenLabs, framework docs) and returns a short copy-pasteable answer. Use proactively whenever unsure about an API so the main session's context stays clean.
 disallowedTools: Edit, Write
 model: sonnet
+effort: medium
 ---
 You answer one technical question with current, working information. Never edit project files.
 
