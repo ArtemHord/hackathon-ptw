@@ -101,8 +101,9 @@ ANSWER_SCHEMA: dict[str, Any] = {
         "confidence": {"type": "number"},
         "needs_expert": {"type": "boolean"},
         "topic": {"type": "string"},
+        "expert_question": {"type": "string"},
     },
-    "required": ["answer", "confidence", "needs_expert", "topic"],
+    "required": ["answer", "confidence", "needs_expert", "topic", "expert_question"],
     "additionalProperties": False,
 }
 
@@ -142,6 +143,10 @@ team, even if not in the experts list), do not answer yourself: set needs_expert
 topic to that person's name exactly as said.
 - confidence: 0-1, how sure you are the answer is correct and allowed by these rules.
 - topic: "" when needs_expert is false.
+- expert_question: when needs_expert is true, ONE self-contained English question for \
+the expert, composed from the whole recent transcript: exactly what to ask plus the needed \
+context (ticket, project, customer names) and who asked (e.g. "Misha asks: ..."). Never \
+copy fragments like "can you reach out". "" when needs_expert is false.
 - If a "## Jira" section is in the user message, answer the ticket question from it: \
 status, assignee and due date, briefly. If it says a ticket was not found, say so; that \
 alone is not a reason to set needs_expert.
@@ -385,6 +390,7 @@ def _normalize(raw: dict[str, Any]) -> dict[str, Any]:
         "confidence": confidence,
         "needs_expert": bool(raw.get("needs_expert")),
         "topic": str(raw.get("topic") or "").strip(),
+        "expert_question": str(raw.get("expert_question") or "").strip(),
     }
 
 
@@ -441,9 +447,20 @@ def _strip_lead(text: str) -> str:
     return re.sub(r"^[\W_]+", "", text).strip()
 
 
+# ASR cuts sentences: a question ending on one of these words is unfinished.
+DANGLING_WORDS = frozenset(
+    "to and ask about the a of for with out please what's his her my our your me us".split()
+)
+
+
 def _is_partial(question: str) -> bool:
     q = question.rstrip()
-    return len(_WORD.findall(q)) < PARTIAL_MAX_WORDS and not q.endswith("?")
+    if q.endswith("?"):
+        return False
+    if len(_WORD.findall(q)) < PARTIAL_MAX_WORDS:
+        return True
+    words = re.findall(r"[\w']+", q.lower().replace("\u2019", "'"))
+    return bool(words) and words[-1] in DANGLING_WORDS
 
 
 async def _answer_partial_later(
@@ -725,7 +742,10 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
         expert: str | None = None
         try:
             hooked = await on_needs_expert(
-                meeting_id, question, result["topic"] or "owner", asked_by
+                meeting_id,
+                result.get("expert_question") or question,
+                result["topic"] or "owner",
+                asked_by,
             )
         except Exception:
             log.exception("on_needs_expert failed in %s", meeting_id)

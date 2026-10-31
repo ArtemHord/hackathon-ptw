@@ -94,10 +94,20 @@ def world(monkeypatch):
 
 
 def completion(
-    answer="Artem finished the Slack escalation flow.", confidence=0.9, needs_expert=False, topic=""
+    answer="Artem finished the Slack escalation flow.",
+    confidence=0.9,
+    needs_expert=False,
+    topic="",
+    expert_question="",
 ):
     content = json.dumps(
-        {"answer": answer, "confidence": confidence, "needs_expert": needs_expert, "topic": topic}
+        {
+            "answer": answer,
+            "confidence": confidence,
+            "needs_expert": needs_expert,
+            "topic": topic,
+            "expert_question": expert_question,
+        }
     )
     return httpx.Response(
         200,
@@ -589,3 +599,47 @@ async def test_agent_said_fetch_failure_is_not_fatal(world):
     respx.post(OPENAI_URL).mock(return_value=completion())
     await orchestrator.handle(MID, utt("Atlas, what did Artem finish this week?"))
     assert world["said"] == ["Artem finished the Slack escalation flow."]
+
+
+def test_schema_has_expert_question():
+    schema = orchestrator.ANSWER_SCHEMA
+    assert schema["properties"]["expert_question"] == {"type": "string"}
+    assert "expert_question" in schema["required"]
+    assert set(schema["required"]) == set(schema["properties"])
+    assert "expert_question" in orchestrator.SYSTEM_PROMPT
+
+
+@respx.mock
+async def test_escalation_gets_composed_expert_question(world):
+    eq = "Artem asks: what is the current status of Julian's ticket?"
+    respx.post(OPENAI_URL).mock(
+        return_value=completion(
+            answer="", confidence=0.2, needs_expert=True, topic="Julian", expert_question=eq
+        )
+    )
+    await orchestrator.handle(MID, utt("Atlas, can you reach out to Julian about his ticket?"))
+    assert world["hook"] == [(MID, eq, "Julian", "Misha")]
+
+
+@respx.mock
+async def test_escalation_falls_back_to_raw_question(world):
+    respx.post(OPENAI_URL).mock(
+        return_value=completion(answer="", confidence=0.2, needs_expert=True, topic="infra")
+    )
+    await orchestrator.handle(MID, utt("Atlas, is the deploy green?"))
+    assert world["hook"] == [(MID, "is the deploy green?", "infra", "Misha")]
+
+
+@pytest.mark.parametrize(
+    "q,partial",
+    [
+        ("can you please reach out to", True),
+        ("can you reach out to Julian and ask about", True),
+        ("ask Julian what's", True),
+        ("what is our API rate limit", False),
+        ("can you reach out to Julian?", False),
+        ("ask Julian about his ticket", False),
+    ],
+)
+def test_is_partial_dangling_words(q, partial):
+    assert orchestrator._is_partial(q) is partial
