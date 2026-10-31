@@ -69,6 +69,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "respx" },
     { name = "ruff" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -87,6 +88,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.4.1" },
     { name = "respx", specifier = ">=0.23.1" },
     { name = "ruff", specifier = ">=0.17.3" },
+    { name = "websockets", specifier = ">=17.4" },
 ]
 
 [[package]]
