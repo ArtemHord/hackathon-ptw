@@ -532,3 +532,60 @@ async def test_partial_not_merged_with_other_speaker(world, monkeypatch):
     await asyncio.sleep(0.2)
     assert route.call_count == 1
     assert _question(route) == "what did"  # answered alone, never merged with Dima
+
+
+# --- M10.1: Jarvis persona + own answers in context ------------------------------------
+
+
+def test_prompt_jarvis_rules():
+    msgs = orchestrator.build_messages("b", [], "Misha", "q?", "- Dima: infra")
+    system = msgs[0]["content"]
+    assert "Jarvis" in system
+    assert "as an AI" in system  # the "never say" rule
+    assert "own knowledge" in system  # general knowledge allowed
+    assert "cannot check live" in system  # chat_json: no answers from memory on live facts
+    assert "needs_expert=true" in system and 'topic="owner"' in system  # no commitments
+    assert "Answer ONLY from the context below" not in system
+    assert "MUST call web_search" in orchestrator.TOOLS_PROMPT
+    assert "NEVER search for anything internal" in orchestrator.TOOLS_PROMPT
+
+
+def test_build_messages_interleaves_agent_lines_by_ts():
+    recent = [
+        {"speaker": "Misha", "text": "Atlas, what is our API rate limit?", "ts_start": 10.0},
+        {"speaker": "Misha", "text": "Atlas, and why is that?", "ts_start": 20.0},
+    ]
+    said = [{"text": "Our API rate limit is 50 requests per second.", "ts": 14.0}]
+    user = orchestrator.build_messages("", recent, "Misha", "and why is that?", "", None, said)[1][
+        "content"
+    ]
+    a = user.index("Misha: Atlas, what is our API rate limit?")
+    b = user.index("Atlas: Our API rate limit is 50 requests per second.")
+    c = user.index("Misha: Atlas, and why is that?")
+    assert a < b < c
+
+
+@respx.mock
+async def test_answer_context_includes_own_recent_answers(world, monkeypatch):
+    seen = {}
+
+    async def get_recent_agent_said(meeting_id, since_ts, limit=5):
+        seen["args"] = (meeting_id, since_ts, limit)
+        return [{"text": "Canberra is the capital.", "ts": 13.0}]
+
+    monkeypatch.setattr(db, "get_recent_agent_said", get_recent_agent_said)
+    route = respx.post(OPENAI_URL).mock(return_value=completion(answer="Because it is."))
+    await orchestrator.handle(MID, utt("Atlas, and why is that?"))
+
+    assert seen["args"] == (MID, pytest.approx(382 - 120), 5)
+    user = json.loads(route.calls.last.request.content)["messages"][1]["content"]
+    assert user.index("Misha: Morning!") < user.index("Atlas: Canberra is the capital.")
+    assert world["said"] == ["Because it is."]
+
+
+@respx.mock
+async def test_agent_said_fetch_failure_is_not_fatal(world):
+    # DATABASE_URL is "" in tests: the real query raises and the answer still goes out
+    respx.post(OPENAI_URL).mock(return_value=completion())
+    await orchestrator.handle(MID, utt("Atlas, what did Artem finish this week?"))
+    assert world["said"] == ["Artem finished the Slack escalation flow."]

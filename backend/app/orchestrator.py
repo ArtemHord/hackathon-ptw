@@ -92,22 +92,37 @@ ANSWER_SCHEMA: dict[str, Any] = {
 }
 
 # Owner and agent names come from runtime settings (web UI, env fallback).
-SYSTEM_PROMPT = """You are {agent}, {owner}'s delegate in this call.
-People in the call address you as "{agent}". Your words are spoken aloud in the call.
+SYSTEM_PROMPT = """You are {agent}, {owner}'s delegate in this call. Speak like Jarvis: \
+confident, concise, warm and quietly witty. People in the call address you as "{agent}". \
+Your words are spoken aloud in the call.
 
 Rules:
+- Use the asker's first name naturally when it fits. Never say "as an AI" or mention being \
+a language model; never lecture or hedge.
 - The question comes from noisy live speech recognition: interpret it charitably using the \
-brief and the documents ("what the tartan finish" = "what did {owner} finish"). If it is \
-still unclear what was asked, reply with ONE short clarifying question.
-- Answer ONLY from the context below: the owner's brief, the company documents and the \
-recent transcript. Never guess or invent facts.
+brief and the documents ("what the tartan finish" = "what did {owner} finish"). Follow-ups \
+("and why is that?") refer to the recent transcript, including your own earlier answers \
+(lines starting "{agent}:"): build on that answer. For a "why" or "how" follow-up, explain \
+the general reasoning from your own knowledge (e.g. why APIs have rate limits) when the \
+context has no company-specific reason; do not escalate just for that. If it is still \
+unclear what was asked, reply with ONE short clarifying question.
+- General, public, timeless knowledge (geography, science, definitions, how a technology or \
+standard works, e.g. what an HTTP status code means): answer directly from your own \
+knowledge, confidently, needs_expert=false, confidence 0.9 or higher.
+- Time-sensitive public facts (latest or current versions, releases, prices, news, \
+anything about "today" or "this week"): NEVER answer from memory. You cannot check live \
+data right now: say so in one short sentence (e.g. "I can't check that live right now, \
+<their name>."), needs_expert=false.
+- Internal facts (the company's or {owner}'s plans, dates, deadlines, decisions, \
+customers, people, projects, roadmap, migrations, numbers, configuration): answer ONLY from \
+the owner's brief, the company documents, the recent transcript and tool results. Never \
+guess or invent them. If they are not there, set needs_expert=true and topic to the best \
+matching expert topic from the list below (or "owner" if none fits).
 - At most 2 short spoken sentences, in English. No markdown, no lists.
 - NEVER make commitments, promises, estimates or deadlines on behalf of the owner. For any \
 question asking you to commit, agree, promise or give a date for the owner, set \
 needs_expert=true and topic="owner".
-- If the context does not contain the answer, set needs_expert=true and topic to the best \
-matching expert topic from the list below (or "owner" if none fits).
-- confidence: 0-1, how sure you are the answer is fully supported by the context.
+- confidence: 0-1, how sure you are the answer is correct and allowed by these rules.
 - topic: "" when needs_expert is false.
 - If a "## Jira" section is in the user message, answer the ticket question from it: \
 status, assignee and due date, briefly. If it says a ticket was not found, say so; that \
@@ -126,8 +141,11 @@ alone is not a reason to set needs_expert.
 # Appended to the system prompt on the tool path only (the chat_json fallback has no tools).
 TOOLS_PROMPT = """
 ## Tools
-- web_search: ONLY for public, external facts: technology, software versions, news, \
-standards, public companies. NEVER search for anything internal to the company or the \
+You CAN check live data now: this replaces the "cannot check live data" rule above.
+- web_search: for time-sensitive public facts (latest or current versions, releases, \
+prices, news, "today") you MUST call web_search before answering, every time, and answer \
+from its result; never from memory. Do not search for timeless general knowledge you \
+already know. NEVER search for anything internal to the company or the \
 owner (plans, dates, deadlines, migrations, decisions, people, projects, roadmaps): if the \
 context does not answer an internal question, set needs_expert=true as above, no search.
 - search_knowledge: the company knowledge base and facts from past meetings. Use it for an \
@@ -208,15 +226,22 @@ def build_messages(
     question: str,
     experts: str = "(none)",
     jira_issues: list[dict[str, Any]] | None = None,
+    agent_lines: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
+    """agent_lines: the agent's own recent agent_said rows ({text, ts}), interleaved by ts
+    into the transcript as "<AGENT_NAME>: ..." so follow-ups can refer to them."""
+    agent = runtime.get("AGENT_NAME")
     system = SYSTEM_PROMPT.format(
-        agent=runtime.get("AGENT_NAME"),
+        agent=agent,
         owner=runtime.get("OWNER_NAME"),
         brief=brief.strip() or "(no brief)",
         experts=experts,
         docs=seed_docs(),
     )
-    transcript = "\n".join(f"{u['speaker']}: {u['text']}" for u in recent) or "(empty)"
+    lines = [(float(u.get("ts_start") or 0.0), f"{u['speaker']}: {u['text']}") for u in recent]
+    lines += [(float(a.get("ts") or 0.0), f"{agent}: {a['text']}") for a in agent_lines or []]
+    lines.sort(key=lambda x: x[0])  # stable: same-ts lines keep transcript order
+    transcript = "\n".join(t for _, t in lines) or "(empty)"
     user = f"Recent transcript (last 2 minutes):\n{transcript}\n\n{speaker} asks you: {question}"
     if jira_issues:
         user += "\n\n## Jira\n" + "\n\n".join(jira_section(i) for i in jira_issues)
@@ -530,14 +555,15 @@ async def _answer(meeting_id: str, utterance: dict[str, Any], question: str) -> 
         _safe(db.get_recent_utterances(meeting_id, call_ts - CONTEXT_WINDOW_S), []),
         _safe(experts_text(), "(none)"),
         _safe(jira_context(question), []),  # [] unless Jira is set up and a key was said
+        _safe(db.get_recent_agent_said(meeting_id, call_ts - CONTEXT_WINDOW_S), []),
     )
     filler = False
     done, _ = await asyncio.wait({context}, timeout=FILLER_AFTER_S)
     if not done:  # slow context (a Jira lookup): the filler covers it
         filler = True
         await speech.say_filler(meeting_id)
-    brief, recent, experts, issues = await context
-    messages = build_messages(brief, recent, asked_by, question, experts, issues)
+    brief, recent, experts, issues, said = await context
+    messages = build_messages(brief, recent, asked_by, question, experts, issues, said)
     task = asyncio.create_task(_think(meeting_id, messages))
 
     if not filler:

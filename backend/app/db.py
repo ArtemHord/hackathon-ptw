@@ -259,6 +259,25 @@ async def insert_agent_said(
     return dict(row)
 
 
+async def get_recent_agent_said(
+    meeting_id: str, since_ts: float, limit: int = 5
+) -> list[dict[str, Any]]:
+    """The agent's own lines with ts >= since_ts (seconds from call start), oldest first.
+    Hot path (answer context): one small indexed-by-meeting read, at most `limit` rows."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """select * from (
+             select text, ts from agent_said
+             where meeting_id = $1 and ts >= $2
+             order by ts desc limit $3
+           ) t order by ts""",
+        meeting_id,
+        since_ts,
+        limit,
+    )
+    return [dict(r) for r in rows]
+
+
 # --- experts -----------------------------------------------------------------
 
 
