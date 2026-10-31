@@ -3,8 +3,8 @@
 Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
-- Milestone: M1
-- In progress: M1 verifier run
+- Milestone: M2
+- In progress: M2.1 agent page + /agent-page/ws (senior-developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -17,7 +17,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - [x] M0.4 `backend/Dockerfile` (uvicorn on `0.0.0.0:${PORT:-8000}`), Railway root `backend/`, healthcheck `/health`
 - [x] M0.3 Migrations `001_init.sql` (all tables + `vector`) + `scripts/migrate.py` (idempotent; Supabase Session pooler 5432)
 
-### M1 · Agent in the call (target 04:30)
+### M1 · Agent in the call (target 04:30) — DONE 03:20 (live Meet join pending, batched with M2.1)
 - [x] M1.1 Recall client, `POST /meetings`, `POST /meetings/{id}/leave`; bot joins Google Meet
 - [x] M1.2 Transcript webhook → `utterances`, dedup, WS event
 - [x] M1.3 Bot status webhook
@@ -67,6 +67,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:20 · M1 verify · PASS: auth 401s, simulator 7/7 utterances + in_call/done, DB state ok · live join not tested
 - 03:20 · M1.4 · simulator replays demo (7 lines, dedup shown, status in_call/done); 31 tests · bb3b6ab
 - 03:18 · M1.3 · status webhook mapping + terminal-state guard, postcall_hook stub; 30 tests · 609ed4d
 - 03:16 · M1.2 · transcript webhook dedup + /app/ws (4401), orchestrator_hook stub for M2.3; 26 tests; Docker --no-access-log (token in query) · 2adf1ce

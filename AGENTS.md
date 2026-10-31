@@ -23,7 +23,7 @@ Everything the agent says or writes in a call is in English (demo language).
 ## Repo map
 - `backend/app/` — one module per concern: `main.py`, `config.py`, `db.py`, `recall.py`, `orchestrator.py`, `escalation.py`, `notifier/` (base, slack, telegram), `tts.py`, `rag.py`, `factcheck.py`, `postcall.py`
 - `backend/migrations/`, `backend/seed/`, `backend/tests/`
-- `agent-page/index.html` — the bot's "camera" page (vanilla JS, no build), served by FastAPI at `/agent`
+- `backend/agent_page/index.html` — the bot's "camera" page (vanilla JS, no build), served by FastAPI at `/agent` (inside backend/ so the Railway image contains it)
 - `scripts/` — migrate, seed_kb, simulate_meeting
 - **API contract = `docs/API.pl.md` + `mocks/*.json`**. The iOS app is built against it. Frozen after M0: change only via an issue labeled `contract`, and update the mocks in the same PR.
 - `ios/` — SwiftUI app (later, from Misha's mockup)
