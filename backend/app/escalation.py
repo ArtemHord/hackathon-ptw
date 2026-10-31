@@ -53,9 +53,15 @@ def _named(text: str, experts: list[Expert]) -> Expert | None:
 # "Atlas, ask Artem whether ..." -> look the person up in the Slack workspace (M10.2), so any
 # teammate can be asked by name without being set up under /ui -> Experts first.
 _ASK_RE = re.compile(
-    r"\b(?:ask|contact|ping|message|check with)\s+@?([a-z][\w.'-]*(?:\s+[a-z][\w.'-]*)?)", re.I
+    r"\b(?:ask|contact|ping|message|text|dm|check with|reach out to|talk to|write to|get hold of)"
+    r"[\s,]+@?([a-z][\w.'-]*(?:[\s,]+[a-z][\w.'-]*)?)",
+    re.I,
 )
 _NOT_A_NAME = {
+    "you",
+    "and",
+    "please",
+    "to",
     "him",
     "her",
     "them",
@@ -87,7 +93,7 @@ def requested_names(topic: str, question: str) -> list[str]:
     t = (topic or "").strip()
     if t and t.lower() != "owner":
         out.append(t)
-    words = [w for w in m.group(1).split() if w.lower() not in _NOT_A_NAME]
+    words = [w for w in re.split(r"[\s,]+", m.group(1)) if w and w.lower() not in _NOT_A_NAME]
     if words:
         out += [" ".join(words), words[0]]
     return list(dict.fromkeys(out))
