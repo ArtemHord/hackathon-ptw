@@ -87,7 +87,7 @@ Wait for Atlas to finish speaking (orb idle) before the next "Atlas, …". A tri
 | S1 brief | "Okay Atlas, what did Artem finish this week?" | SDK v2 (from the brief) | voice; `agent latency` ≤ 5 s |
 | S2 KB | "Atlas, what's our API rate limit?" | 50 rps per key | no escalation |
 | S3 memory ★ | "Atlas, a few weeks ago we promised Northwind something if the export is late, what was it?" | "On the 10 October call Artem agreed to 10 % off the December invoice if the CSV export slips past 28 November." | log `tools=search_knowledge` |
-| S4 memory | "Atlas, how many API keys did we give Northwind for Black Friday?" | three keys, 50 rps each | |
+| S4 memory | "Atlas, how many API keys did we give Northwind for Black Friday?" | three keys (customers.md); may not mention Black Friday | |
 | S5 Jira | "Atlas, what's the status of ticket 2?" | In Progress, Julian, due 14 Nov | log `jira lookup` (if ASR writes "two", report it as a bug) |
 | S6 escalation ★ | "Atlas, when do we migrate to Postgres 17?" | "asking Dima" → Slack DM → reply **in thread** "Thursday" → "Dima says: Thursday" + Meet chat | orb ask → flash; `/ui` meeting card |
 | S7 recall after escalation | (later) "Atlas, what did Dima say about the migration?" | "Dima said Thursday" | needs M8.1b on prod |
