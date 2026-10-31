@@ -5,7 +5,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 ## Now
 - Milestone: M3 (HERO)
 - In progress: M6.1 /app/ws completeness, tokens, CORS (developer) — M3.5 blocked on HUMAN (keys, Slack, live test)
-- Blocked: Railway 502 (target port / root dir — Artem) · M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
+- Blocked: M3.5 first E2E demo run → needs Artem: Railway vars/keys, Slack Request URL + Dima email, Meet call
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
 Cut rules: escalation not end-to-end by 06:30 → drop M5. After 08:30 → bug fixes only. 11:00 → freeze. If M2 not done by 05:30 → start M3 anyway.
@@ -67,15 +67,22 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Stage backup: `POST /debug/expert-reply?token=WEBHOOK_TOKEN {escalation_id,text}` speaks the answer if Slack fails; `GET /debug/escalations?meeting_id=&token=`. No SLACK_BOT_TOKEN → fake notifier (logs only).
 - Run: `cd backend && uv run pytest -q`; simulate: `cd backend && DATABASE_URL=… WEBHOOK_TOKEN=… DEMO_TOKEN=… uv run python ../scripts/simulate_meeting.py --speed 20` (needs running backend + DB; exit 1 if utterance events != unique lines); Recall status dashboard URL `{PUBLIC_BASE_URL}/webhooks/recall/status?token={WEBHOOK_TOKEN}`; Docker CMD uvicorn on `${PORT:-8000}`; agent-page/ outside build context → serve from backend/ (M2.1).
 
+## Next human steps (in order)
+1. Recall dashboard status webhook `{PUBLIC_BASE_URL}/webhooks/recall/status?token=WT`
+2. Slack Request URL `{PUBLIC_BASE_URL}/webhooks/slack` Verified + Dima real email in seed/experts.json
+3. `seed_kb.py` on Supabase
+4. LIVE TEST 1 (join/transcript/tone) → M3.5 full run per docs/DEMO.md
+
 ## Human tasks (Artem, in parallel — we build on respx mocks, ask only for live checks)
 - [x] Supabase project (EU) + `vector`; migrate 001 applied 04:09
-- [ ] Railway project (EU), auto-deploy from main, root `backend/` → domain = `PUBLIC_BASE_URL`
+- [x] Railway live 04:24: PUBLIC_BASE_URL=https://hackathon-ptw-production.up.railway.app (/health ok)
 - [ ] Recall.ai API key (eu-central-1)
 - [ ] Slack app (SPEC "Konfiguracja Slack app"); Request URL after M3.2 is deployed
 - [ ] ElevenLabs voice id + OpenAI key
 - Live checks pending: seed KB on Supabase `cd backend && uv run python ../scripts/seed_kb.py` · SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; 
 
 ## Log (newest on top)
+- 04:24 · HUMAN · Railway /health ok (502 was Railway config)
 - 04:22 · M5.2 · proposals + approve/reject (transactional, 409 stale), + my guard old_text ≥ 10 chars; 177 tests · f57aab6
 - 04:19 · M5.1 · fact-check; review BLOCKER (source null in app) → kb_chunk_for_title, verified on real pg; 170 tests · a688278
 - 04:17 · M4 verify · PASS: list/detail keys = mocks, ?since filters, /chat fallback, /kb/docs, 401s · item keys of empty arrays covered by M4.3a real-DB tests
