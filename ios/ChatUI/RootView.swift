@@ -109,10 +109,55 @@ struct MainView: View {
     let openSidebar: () -> Void
 
     var body: some View {
+        content
+            .overlay(alignment: .top) {
+                ConnectionBanner(store: store, openSidebar: openSidebar)
+                    .padding(.top, 56)
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if case .section(let section) = store.selection {
             SectionScreen(section: section, store: store, openSidebar: openSidebar)
         } else {
             ChatScreen(store: store, openSidebar: openSidebar)
         }
+    }
+}
+
+/// Not connected, wrong token or a backend error: say so on the main screen, with a way out (never sample data)
+private struct ConnectionBanner: View {
+    let store: ConversationStore
+    let openSidebar: () -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        switch store.connection {
+        case .setup:
+            banner("Not connected. Menu → ⚙︎ Settings → Backend: paste DEMO_TOKEN.", button: "Open menu", action: openSidebar)
+        case .unauthorized:
+            banner("Wrong token. Menu → ⚙︎ Settings → Backend.", button: "Open menu", action: openSidebar)
+        case .offline(let message):
+            banner("Backend error: \(message.prefix(140))", button: "Retry") { Task { await store.refresh() } }
+        case .connected, .connecting, .demo:
+            EmptyView()
+        }
+    }
+
+    private func banner(_ text: String, button: String, action: @escaping () -> Void) -> some View {
+        HStack(spacing: 10) {
+            Text(text)
+                .font(.onest(14))
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(button, action: action)
+                .font(.onest(14, .semibold))
+                .foregroundStyle(theme.accent)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, 12)
     }
 }

@@ -92,7 +92,7 @@ struct SettingsView: View {
                 } footer: {
                     Text(store.usesBackend
                         ? "Answers, search across calls and the voice come from the backend, so the phone needs no AI keys."
-                        : "Connect the backend for real answers. Without it, OPENAI_API_KEY in Secrets.env answers from the phone.")
+                        : "Connect the backend for real answers.")
                 }
                 Section {
                     LabeledContent("Version", value: "1.0 (demo)")
@@ -116,7 +116,7 @@ struct SettingsView: View {
 extension SettingsView {
     private var answersSource: String {
         if store.usesBackend { return "Call Crew backend" }
-        return AppConfig.openAIKey == nil ? "Demo" : "OpenAI · \(AppConfig.chatModel)"
+        return store.connection == .demo ? "Demo" : "Not connected"
     }
 }
 
@@ -128,6 +128,7 @@ private struct BackendSection: View {
     @State private var token = ""
     @State private var isConnecting = false
     @State private var error: String?
+    @State private var demoData = UserDefaults.standard.bool(forKey: "demoData")
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -162,13 +163,14 @@ private struct BackendSection: View {
                         .font(.onest(15))
                         .foregroundStyle(.red)
                 }
+                Toggle("Demo data", isOn: Binding(get: { demoData }, set: { demoData = $0; store.setDemoData($0) }))
             }
         } header: {
             Text("Backend")
         } footer: {
             Text(store.usesBackend
                 ? "Calls, transcripts and tasks sync from the Call Crew backend every few seconds."
-                : "Paste DEMO_TOKEN from the backend (Railway → Variables). It stays in the Keychain on this phone. Without it, the app shows sample calls.")
+                : "Paste DEMO_TOKEN from the backend (Railway → Variables). It stays in the Keychain on this phone. \"Demo data\" shows sample calls without a backend.")
         }
     }
 
@@ -179,7 +181,8 @@ private struct BackendSection: View {
         case .connecting: (nil, "Connecting…", theme.secondaryText)
         case .unauthorized: ("xmark.octagon.fill", "Wrong token", .red)
         case .offline: ("wifi.slash", "Offline", .orange)
-        case .demo: (nil, "Sample calls", theme.secondaryText)
+        case .demo: (nil, "Demo data", theme.secondaryText)
+        case .setup: (nil, "Not connected", theme.secondaryText)
         }
         return Group {
             if let symbol {

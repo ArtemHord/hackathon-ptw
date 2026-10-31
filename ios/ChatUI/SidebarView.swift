@@ -96,12 +96,14 @@ struct SidebarView: View {
             EmptyView()
         case .connecting:
             ConnectionRow(color: .orange, title: "Connecting to the backend…", action: nil)
+        case .setup:
+            ConnectionRow(color: .orange, title: "Not connected", detail: "Open Settings", action: { showSettings = true })
         case .demo:
-            ConnectionRow(color: theme.secondaryText, title: "Sample calls", detail: "Connect", action: { showSettings = true })
+            ConnectionRow(color: theme.secondaryText, title: "Demo data", detail: "Connect", action: { showSettings = true })
         case .unauthorized:
             ConnectionRow(color: .red, title: "Wrong token", detail: "Open Settings", action: { showSettings = true })
-        case .offline:
-            ConnectionRow(color: .orange, title: "Offline", detail: "Retrying…", action: { Task { await store.refresh() } })
+        case .offline(let message):
+            ConnectionRow(color: .orange, title: "Backend error: \(message.prefix(80))", detail: "Retry", action: { Task { await store.refresh() } })
         }
     }
 

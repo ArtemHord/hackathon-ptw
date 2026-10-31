@@ -175,10 +175,9 @@ struct ChatScreen: View {
             if !store.isStreaming && followsStream {
                 withAnimation(.smooth) { position.scrollTo(edge: .bottom) }
             }
-            // Asked by voice: hear the answer in the server's voice
+            // Asked by voice: no auto-play (each /tts costs money); the speaker button under the answer reads it out
             if !store.isStreaming && speaksNextAnswer {
                 speaksNextAnswer = false
-                if store.usesBackend, let answer = store.lastAssistantMessage { store.listen(to: answer) }
             }
         }
         .onChange(of: store.liveRevision) {

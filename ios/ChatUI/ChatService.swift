@@ -94,6 +94,17 @@ struct BackendChatService: ChatService {
     }
 }
 
+/// No backend and no demo data: tell the user where to connect instead of making something up
+struct NotConnectedChatService: ChatService {
+    struct NotConnected: LocalizedError {
+        var errorDescription: String? { "Connect the backend first: Settings → Backend (server + DEMO_TOKEN)." }
+    }
+
+    func reply(to history: [Message], context: ChatContext) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { $0.finish(throwing: NotConnected()) }
+    }
+}
+
 /// Demo service without a network: builds an answer from the summary and tasks and streams it word by word
 struct MockChatService: ChatService {
     func reply(to history: [Message], context: ChatContext) -> AsyncThrowingStream<String, Error> {

@@ -12,7 +12,9 @@ final class ConversationStore {
     }
 
     enum Connection: Equatable {
-        /// No backend set up: sample calls
+        /// No backend set up and demo data off: the app asks for the server and token
+        case setup
+        /// No backend set up, "Demo data" on in Settings: sample calls
         case demo
         case connecting
         case connected
@@ -29,7 +31,7 @@ final class ConversationStore {
     var conversations: [Conversation] = []
     var discussion: [Message] = []
     var selection: Selection = .discussion
-    private(set) var connection: Connection = .demo
+    private(set) var connection: Connection = .setup
     private(set) var settings: BackendSettings?
     private(set) var experts: [Person] = []
     /// What the agent is doing in the open live call — the orb on the call screen follows it
@@ -74,8 +76,16 @@ final class ConversationStore {
         if let saved = BackendSettings.load() {
             connect(saved)
         } else {
-            useSampleCalls()
+            useOffline()
         }
+    }
+
+    /// Settings → "Demo data": sample calls only when no backend is connected, off by default
+    var demoDataEnabled: Bool { UserDefaults.standard.bool(forKey: "demoData") }
+
+    func setDemoData(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: "demoData")
+        if !usesBackend { useOffline() }
     }
 
     var client: BackendClient? { settings.map(BackendClient.init) }
@@ -102,7 +112,7 @@ final class ConversationStore {
     func disconnect() {
         BackendSettings.clear()
         stopSync()
-        useSampleCalls()
+        useOffline()
     }
 
     private func connect(_ settings: BackendSettings) {
@@ -118,13 +128,23 @@ final class ConversationStore {
         startSync()
     }
 
-    private func useSampleCalls() {
+    /// No backend: sample calls behind the "Demo data" toggle, otherwise nothing and a prompt to connect.
+    /// Answers never come from OpenAI on the phone.
+    private func useOffline() {
         settings = nil
-        connection = .demo
         experts = []
-        service = AppConfig.openAIKey.map { OpenAIChatService(apiKey: $0, model: AppConfig.chatModel) } ?? MockChatService()
-        conversations = SampleData.conversations
-        selection = .conversation(SampleData.conversations[0].id)
+        discussion = []
+        if demoDataEnabled {
+            connection = .demo
+            service = MockChatService()
+            conversations = SampleData.conversations
+            selection = .conversation(SampleData.conversations[0].id)
+        } else {
+            connection = .setup
+            service = NotConnectedChatService()
+            conversations = []
+            selection = .discussion
+        }
     }
 
     private func stopSync() {
@@ -183,9 +203,12 @@ final class ConversationStore {
     /// Pull-to-refresh on a call: the list and the open call
     func reloadCurrent() async {
         await refresh()
-        guard let client, case .conversation(let id) = selection,
-              let detail = try? await client.meeting(id) else { return }
-        apply(detail)
+        guard let client, case .conversation(let id) = selection else { return }
+        do {
+            apply(try await client.meeting(id))
+        } catch {
+            notice = "Couldn't load this call. \(error.localizedDescription)"
+        }
     }
 
     private func loadExperts() async {
@@ -272,9 +295,18 @@ final class ConversationStore {
             )
         }
         watchTask = Task { [weak self] in
+            var reported = false
             while !Task.isCancelled {
                 guard let self else { return }
-                if let detail = try? await client.meeting(id) { self.apply(detail) }
+                do {
+                    self.apply(try await client.meeting(id))
+                } catch {
+                    let loaded = self.conversation(id)?.isDetailLoaded ?? true
+                    if !reported, !loaded, !Task.isCancelled, !((error as? BackendError)?.isUnauthorized ?? false) {
+                        reported = true
+                        self.notice = "Couldn't load this call. \(error.localizedDescription) Pull down to retry."
+                    }
+                }
                 guard let call = self.conversation(id) else { return }
                 let waitingForSummary = call.status == .done && call.summary.isEmpty && !call.summaryIsLate
                 guard call.isLive || waitingForSummary else { return }
