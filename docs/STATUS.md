@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M3 (HERO)
-- In progress: M3.2 Slack adapter + /webhooks/slack (senior-developer)
+- In progress: M3.3a escalation loop (senior-developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -32,8 +32,9 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 
 ### M3 · Slack escalation — HERO (target 06:30)
 - [x] M3.1 `Notifier` interface + expert matching
-- [ ] M3.2 Slack adapter + `/webhooks/slack`
-- [ ] M3.3 Escalation loop end-to-end, 2-min timeout → action item
+- [x] M3.2 Slack adapter + `/webhooks/slack`
+- [ ] M3.3a Escalation loop core: start → Slack DM, expert reply → voice + Recall chat + WS, 2-min timeout → action item (senior-developer)
+- [ ] M3.3b Fake notifier + `/debug/expert-reply` + simulator `--expert-reply` for E2E without Slack (developer)
 - [ ] M3.4 Telegram adapter (P2, fallback) — CUT unless M3.5 passes before 06:30
 - [ ] M3.5 First end-to-end demo run (~06:15)
 
@@ -69,6 +70,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: SLACK app (critical path M3) — scopes, install, tokens, Dima email; Request URL after M3.2 deploy · LIVE TEST 1 = Recall join + transcript + tone via `POST /debug/say-tone?meeting_id=&token=` (autoplay in Recall browser unconfirmed) · Recall live join (needs RECALL_API_KEY, PUBLIC_BASE_URL, DATABASE_URL; after M1.3) · Railway public `/health` (deploy from main, root `backend/`) → send domain for `PUBLIC_BASE_URL`; `cd backend && uv run python ../scripts/migrate.py` on Supabase (Session pooler, sslmode=require)
 
 ## Log (newest on top)
+- 03:39 · M3.2 · Slack adapter + webhook (raw-body HMAC, 300 s window, retry skip, event_id dedupe, bot filter); 113 tests · 23b2ff1
 - 03:36 · M3.1 · Notifier protocol + registry, match_expert (postgres/infra→Dima, else owner Artem), experts seeded from json (real DB ok); 93 tests · d603dc7
 - 03:35 · M2 verify · PASS: /agent in browser (green dot, bad token → red), say-tone delivered, simulator OK, no-key LLM fails silently · real voice/LLM untested (keys)
 - 03:34 · M2.3b+M2.4 · orchestrator: aliases, delegate-only, speaking guard, lock, 1.5 s filler, strict JSON, no-commitment rule, agent_said; 82 tests · b9ce17b
