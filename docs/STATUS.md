@@ -4,7 +4,7 @@ Owned by the orchestrator: updated after every task. Times are Europe/Warsaw.
 
 ## Now
 - Milestone: M0
-- In progress: M0.2 API contract (developer)
+- In progress: M0.4 Dockerfile (developer)
 - Blocked: —
 
 ## Plan (re-baselined 03:00; SPEC "Plan do freeze o 11:00")
@@ -13,7 +13,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 
 ### M0 · Fundament (target 03:45) — order M0.1 → M0.2 → M0.4 → M0.3
 - [x] M0.1 Backend skeleton: uv, FastAPI, `/health`, config (all SPEC env vars), ruff, pytest, root `.env.example`
-- [ ] M0.2 API contract: `docs/API.pl.md` + `mocks/*.json` incl. `/app/ws` events (Misha blocked on it)
+- [x] M0.2 API contract: `docs/API.pl.md` + `mocks/*.json` incl. `/app/ws` events (Misha blocked on it)
 - [ ] M0.4 `backend/Dockerfile` (uvicorn on `0.0.0.0:${PORT:-8000}`), Railway root `backend/`, healthcheck `/health`
 - [ ] M0.3 Migrations `001_init.sql` (all tables + `vector`) + `scripts/migrate.py` (idempotent; Supabase Session pooler 5432)
 
@@ -61,6 +61,7 @@ Hosting: `PUBLIC_BASE_URL` = Railway domain (EU, auto-deploy from main); Slack +
 - Live checks pending: —
 
 ## Log (newest on top)
+- 03:05 · M0.2 · contract + 17 mocks (7 WS events incl. meeting_status; one escalation shape; agent_said[] for poll) · 1 review round · 7fe5206
 - 03:02 · M0.1 · skeleton green (pytest 2, ruff clean, /health ok); embed-model default kept (SPEC Decyzje fixes 3-small/1536) · ed1d5d9
 - 03:01 · R1 · Recall/Slack open items → decisions #13–20; UNCONFIRMED: send_chat_message body, Slack bot_id · R1 commit
 - 03:00 · kickoff · re-baseline M0 03:45/M1 04:30/M2 05:30/M3 06:30 · researcher + M0.1 started
