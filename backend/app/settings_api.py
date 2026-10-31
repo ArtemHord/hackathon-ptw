@@ -60,6 +60,7 @@ async def put_settings(body: dict[str, str]) -> dict[str, Any]:
         if body["DEMO_PROFILE"] not in ("", *profile.PROFILES):
             allowed = " | ".join(profile.PROFILES)
             raise ApiError(422, "validation_error", f"DEMO_PROFILE must be {allowed}")
+    _check_formats(body)
     await runtime.save(body)
     if "DEMO_PROFILE" in body:
         profile.reset()  # docs, experts, fact-check filter, incidents belong to the old profile
@@ -69,6 +70,24 @@ async def put_settings(body: dict[str, str]) -> dict[str, Any]:
     if {"TELEGRAM_BOT_TOKEN"} & body.keys():
         telegram_api.reset()
     return _settings()
+
+
+# Catch a wrong paste (Client Secret, Verification Token, page text) on save: a bad signing
+# secret otherwise only shows up as 401s on /webhooks/slack and "challenge" errors in Slack.
+FORMATS = {
+    "SLACK_SIGNING_SECRET": (
+        r"[0-9a-f]{32}",
+        "32 hex characters (Basic Information -> Signing Secret)",
+    ),
+    "SLACK_BOT_TOKEN": (r"xoxb-[\w-]+", "a bot token starting with xoxb- (OAuth & Permissions)"),
+}
+
+
+def _check_formats(body: dict[str, str]) -> None:
+    for key, (pattern, hint) in FORMATS.items():
+        value = (body.get(key) or "").strip()
+        if value and not re.fullmatch(pattern, value):
+            raise ApiError(422, "validation_error", f"{key} must be {hint}")
 
 
 # --- integrations -----------------------------------------------------------------
