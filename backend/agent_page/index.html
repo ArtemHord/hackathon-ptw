@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Call Crew (AI)</title>
+<meta name="viewport" content="width=1280, height=720">
+<style>
+  /* Recall renders this page at 1280x720 on ~0.25 CPU: keep it static, animate only while speaking. */
+  html, body { margin: 0; height: 100%; background: #0b0d12; color: #f2f4f8; overflow: hidden;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .stage { position: relative; height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; }
+  .badge { position: relative; width: 260px; height: 260px; display: flex;
+    align-items: center; justify-content: center; }
+  .core { width: 200px; height: 200px; border-radius: 50%; background: #1b2233;
+    border: 3px solid #3b82f6; display: flex; align-items: center; justify-content: center;
+    font-size: 72px; font-weight: 800; letter-spacing: -2px; color: #7fb0ff; }
+  .ring { position: absolute; inset: 0; border-radius: 50%; border: 6px solid #3b82f6;
+    opacity: 0; }
+  body.speaking .ring { animation: pulse 1.2s ease-out infinite; }
+  body.speaking .core { border-color: #60a5fa; }
+  @keyframes pulse { 0% { transform: scale(0.8); opacity: 0.9; } 100% { transform: scale(1.35); opacity: 0; } }
+  h1 { margin: 36px 0 0; font-size: 64px; font-weight: 800; letter-spacing: -1px; }
+  h1 span { color: #7fb0ff; }
+  .caption { margin-top: 18px; max-width: 1000px; min-height: 40px; text-align: center;
+    font-size: 28px; line-height: 1.35; color: #c7cede; }
+  .status { position: absolute; right: 20px; bottom: 16px; display: flex; align-items: center;
+    gap: 8px; font-size: 14px; color: #6b7385; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #f59e0b; }
+  .dot.on { background: #22c55e; }
+  .dot.bad { background: #ef4444; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="badge"><div class="ring"></div><div class="core">CC</div></div>
+  <h1>Call Crew <span>(AI)</span></h1>
+  <div class="caption" id="caption"></div>
+  <div class="status"><div class="dot" id="dot"></div><span id="status">connecting</span></div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var qs = new URLSearchParams(location.search);
+  var meetingId = qs.get("meeting_id") || "";
+  var token = qs.get("token") || "";
+  var dot = document.getElementById("dot");
+  var statusEl = document.getElementById("status");
+  var caption = document.getElementById("caption");
+
+  var ws = null;
+  var queue = [];
+  var playing = false;
+  var audioCtx = null;
+
+  function setStatus(cls, text) {
+    dot.className = "dot" + (cls ? " " + cls : "");
+    statusEl.textContent = text;
+  }
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify(obj)); } catch (e) { /* reconnect will follow */ }
+    }
+  }
+
+  function setSpeaking(value, id) {
+    document.body.classList.toggle("speaking", value);
+    send({ type: "speaking", value: value, id: id || null });
+  }
+
+  function ctx() {
+    if (!audioCtx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === "suspended") { audioCtx.resume(); }
+    return audioCtx;
+  }
+
+  // Each player calls done() exactly once; a watchdog covers a missing "ended" event.
+  function playMp3(msg, done) {
+    var audio = new Audio("data:audio/mpeg;base64," + msg.audio_b64);
+    var finished = false;
+    var watchdog = null;
+    function finish() {
+      if (finished) { return; }
+      finished = true;
+      clearTimeout(watchdog);
+      done();
+    }
+    audio.onended = finish;
+    audio.onerror = finish;
+    audio.onloadedmetadata = function () {
+      clearTimeout(watchdog);
+      var secs = isFinite(audio.duration) ? audio.duration : 30;
+      watchdog = setTimeout(finish, (secs + 2) * 1000);
+    };
+    watchdog = setTimeout(finish, 60000);
+    var p = audio.play();
+    if (p && p.catch) { p.catch(function (e) { console.warn("play() rejected", e); finish(); }); }
+  }
+
+  function playTone(done) {
+    try {
+      var c = ctx();
+      var osc = c.createOscillator();
+      var gain = c.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, c.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.4, c.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.6);
+      osc.connect(gain).connect(c.destination);
+      osc.start();
+      osc.stop(c.currentTime + 0.62);
+      osc.onended = done;
+      setTimeout(done, 1500); // in case onended never fires (suspended context)
+    } catch (e) {
+      console.warn("tone failed", e);
+      done();
+    }
+  }
+
+  function next() {
+    if (playing) { return; }
+    var msg = queue.shift();
+    if (!msg) { return; }
+    playing = true;
+    caption.textContent = msg.text || "";
+    setSpeaking(true, msg.id);
+    var called = false;
+    function done() {
+      if (called) { return; }
+      called = true;
+      playing = false;
+      if (queue.length === 0) {
+        setSpeaking(false, msg.id);
+        caption.textContent = "";
+      }
+      next();
+    }
+    if (msg.type === "tone") { playTone(done); } else { playMp3(msg, done); }
+  }
+
+  function onMessage(ev) {
+    var msg;
+    try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    if (!msg || typeof msg !== "object") { return; }
+    if (msg.type === "say") { msg.type = "play"; } // SPEC name, same payload
+    if ((msg.type === "play" && msg.audio_b64) || msg.type === "tone") {
+      queue.push(msg);
+      next();
+    }
+  }
+
+  function connect() {
+    var proto = location.protocol === "https:" ? "wss:" : "ws:";
+    var url = proto + "//" + location.host + "/agent-page/ws?meeting_id=" +
+      encodeURIComponent(meetingId) + "&token=" + encodeURIComponent(token);
+    setStatus("", "connecting");
+    try { ws = new WebSocket(url); } catch (e) { setTimeout(connect, 2000); return; }
+    ws.onopen = function () {
+      setStatus("on", "live");
+      send({ type: "speaking", value: playing, id: null }); // re-sync after reconnect
+    };
+    ws.onmessage = onMessage;
+    ws.onclose = function (ev) {
+      setStatus(ev.code === 4401 ? "bad" : "", ev.code === 4401 ? "unauthorized" : "reconnecting");
+      ws = null;
+      setTimeout(connect, 2000);
+    };
+    ws.onerror = function () { /* onclose follows */ };
+  }
+
+  if (!meetingId) { setStatus("bad", "no meeting_id"); }
+  connect();
+})();
+</script>
+</body>
+</html>
