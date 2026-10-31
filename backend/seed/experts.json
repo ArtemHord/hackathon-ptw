@@ -43,6 +43,19 @@
       "email": "misha@example.com",
       "slack_user_id": null,
       "telegram_chat_id": null
+    },
+    {
+      "name": "Artem",
+      "role": "owner",
+      "topics": [
+        "owner",
+        "sdk"
+      ],
+      "channel": "slack",
+      "email": "artem@example.com",
+      "slack_user_id": null,
+      "telegram_chat_id": null,
+      "is_owner": true
     }
   ]
 }

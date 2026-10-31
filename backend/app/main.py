@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app import agent_voice, db, hub, llm, meetings, speech, tts, webhooks_recall
+from app import agent_voice, db, escalation, hub, llm, meetings, speech, tts, webhooks_recall
 
 # app.* INFO lines (e.g. the orchestrator latency log) are invisible under uvicorn otherwise.
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -15,6 +15,7 @@ async def lifespan(app: FastAPI):
     warm = asyncio.create_task(tts.warm_filler())  # no-op without ELEVENLABS_API_KEY
     try:
         async with db.lifespan(app):
+            await escalation.seed_experts()
             yield
     finally:
         warm.cancel()

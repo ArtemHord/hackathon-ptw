@@ -231,3 +231,46 @@ async def insert_agent_said(
         in_reply_to,
     )
     return dict(row)
+
+
+# --- experts -----------------------------------------------------------------
+
+
+async def upsert_experts(experts: list[dict[str, Any]]) -> None:
+    """Idempotent by name. No is_owner column: owner = topics contain "owner"."""
+    pool = await get_pool()
+    for e in experts:
+        topics = list(e.get("topics") or [])
+        if e.get("is_owner") and "owner" not in topics:
+            topics.append("owner")
+        args = (
+            e.get("role"),
+            topics,
+            e.get("channel") or "slack",
+            e.get("email"),
+            e.get("slack_user_id"),
+            e.get("telegram_chat_id"),
+            e["name"],
+        )
+        status = await pool.execute(
+            """update experts set role=$1, topics=$2, channel=$3, email=$4,
+               slack_user_id=coalesce($5, slack_user_id),
+               telegram_chat_id=coalesce($6, telegram_chat_id) where name=$7""",
+            *args,
+        )
+        if status.endswith(" 0"):
+            await pool.execute(
+                """insert into experts (role, topics, channel, email, slack_user_id,
+                   telegram_chat_id, name) values ($1,$2,$3,$4,$5,$6,$7)""",
+                *args,
+            )
+
+
+async def list_experts() -> list[dict[str, Any]]:
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """select id, name, coalesce(role,'') as role, topics, channel, email,
+           slack_user_id, telegram_chat_id, ('owner' = any(topics)) as is_owner
+           from experts order by created_at, name"""
+    )
+    return [dict(r) for r in rows]
